@@ -1,0 +1,973 @@
+
+---------- load packages ----------
+```{r include=FALSE}
+library(tidyverse)
+library(ggpubr)
+library(nlme)
+library(ggrepel)
+library(MuMIn)
+library(patchwork)
+```
+
+
+---------- load data, split in O2 data and calcification data & exclude outliers after visual inspection of obs-expected percentages ----------
+```{r}
+#outlier exlusion in conspecific incubations
+
+#O2 meausrements
+Data <- read.csv("Data/All_expectedvalues.csv")
+
+Day14 <- Data %>% filter(day =="14")
+Day14<- Day14 %>%
+  filter(fragment_ID != "AmuD1_AmuB2_AmuA3" & fragment_ID != "SpiA4_SpiB1_SpiD2")
+
+Day5 <- Data %>% filter(day =="5")
+Day5<- Day5 %>%
+  filter(fragment_ID != "PloB3_PloC3_PloD3")
+
+Data_sub <- Data %>% filter(day != "14" & day != "5")
+
+Data <- rbind(Day14, Day5, Data_sub)
+
+# calcification measurements
+# important to delete minus values in expected calc, otherwise relative difference in percentage is wrong
+Data_calc <- read.csv("Data/All_expectedvalues.csv")
+
+Day14_calc <- Data_calc %>% filter(day =="14")
+Day14_calc<- Day14_calc %>%
+  filter(fragment_ID != "AmuD2_AmuB4_AmuA1" & fragment_ID != "AmuD1_AmuB2_AmuA3" & fragment_ID != "AcyB1_AcyD2_AcyA3" & fragment_ID != "PruD4_PruE2_PruA3" & fragment_ID != "PdaA1_PdaB2_PdaD4" & fragment_ID != "AcyB3_AcyD3_AcyA1")
+
+Day5 <- Data %>% filter(day =="5")
+Day5_calc<- Day5 %>%
+  filter(fragment_ID != "AcyB1_AcyD1_AcyA1")
+
+Day6_calc <- Data_calc %>%  filter(day == "6")
+Day6_calc <- Day6_calc %>%  filter(fragment_ID != "PloB3_PcyB4_PruD4")
+
+Data_sub_calc <- Data %>% filter(day != "14" & day != "5"& day != "6")
+
+Data_calc <- rbind(Day6_calc, Day14_calc, Day5_calc, Data_sub_calc)
+
+rm(Data_sub, Data_sub_calc)
+```
+
+```{r}
+#outlier exclusion in diversity incubations
+
+#O2 measurements
+Day13 <- Data %>% filter(day =="13")
+Day13<- Day13 %>% filter(fragment_ID != "SpiB2_AcyD2_PcyC3" )
+
+Day9 <- Data %>% filter(day =="9")
+Day9<- Day9 %>% filter(fragment_ID != "PdaA2_AmuD2_PruD3" & fragment_ID != "PveF1_MdiC1_PcyB1")
+
+Day7 <- Data %>% filter(day =="7")
+Day7<- Day7 %>% filter(fragment_ID != "PdaB4_AcyD3_PcyC4")
+
+Data_sub <- Data %>% filter(day != "13" & day != "9" & day != "7")
+
+Data <- rbind(Day13, Day9, Day7, Data_sub)
+
+# calcification measurements
+Data_calc <- read.csv("Data/All_expectedvalues.csv")
+
+Day7_calc <- Data_calc %>% filter(day =="7")
+Day7_calc<- Day7_calc %>%filter(fragment_ID != "PdaD1_AcyA1_PcyA1")
+
+Day13_calc <- Data_calc %>% filter(day =="13")
+Day13_calc<- Day13_calc %>%filter(fragment_ID != "PdaD1_AmuA1_PloD1")
+
+Data_sub_calc <- Data_calc %>%  filter(day != "7" & day != "13")
+
+Data_calc <- rbind(Day7_calc, Day13_calc, Data_sub_calc)
+
+# exclude all NA's
+Data <- Data %>% drop_na(net_photo_h_surface)
+Data_calc <- Data_calc %>%  drop_na(calc_umol_cm2_h)
+```
+
+
+---------- calculate difference between observed/measured and expected values and normalize to % ----------
+This is percentage error, which is the difference between an experimental and theoretical value, divided by the theoretical value, multiplied by 100 to give a percent.
+```{r}
+#((100/ exp)* net_obs) -100, rewritten it is ((net_obs/exp)*100)-100, is the same as ((net_obs/exp)-1)*100
+
+Data$exp_obs_net_photo <- with(Data,  Data$net_photo_h_surface - Data$exp_Net_photo_ug_h_cm2)
+Data$exp_obs_net_photo_perc <- with(Data, ((100 / Data$exp_Net_photo_ug_h_cm2) * Data$net_photo_h_surface)-100)
+Data$exp_obs_net_photo_perc <- round(Data$exp_obs_net_photo_perc, 6)
+
+Data$exp_obs_gross_photo <- with(Data, Data$gross_photo_h_surface - Data$exp_Gross_photo_ug_h_cm2)
+Data$exp_obs_gross_photo_perc <- with(Data, ((100 / Data$exp_Gross_photo_ug_h_cm2) * Data$gross_photo_h_surface)-100)
+Data$exp_obs_gross_photo_perc <- round(Data$exp_obs_gross_photo_perc, 6)
+
+Data$exp_obs_respiration <- with(Data, Data$respiration_h_surface - Data$exp_Resp_ug_h_cm2)
+Data$exp_obs_respiration_perc <- with(Data, ((100 / Data$exp_Resp_ug_h_cm2) * Data$respiration_h_surface)-100)
+Data$exp_obs_respiration_perc <- round(Data$exp_obs_respiration_perc, 6)
+
+Data_calc$exp_obs_calc <- with(Data_calc, Data_calc$calc_umol_cm2_h - Data_calc$exp_Calc_umol_h_cm2)
+Data_calc$exp_obs_calc_perc <- with(Data_calc, ((100 / Data_calc$exp_Calc_umol_h_cm2) * Data_calc$calc_umol_cm2_h)-100)
+Data_calc$exp_obs_calc_perc <- round(Data_calc$exp_obs_calc_perc, 6)
+```
+
+
+--- For Multi-family incubations-----
+
+---------- linear regression between measured and expected productivity with colony as random factor ----------
+```{r}
+# # get only diversity incubations
+# mix <- Data %>%  filter(category == "mix")
+# mix_calc <- Data_calc %>%  filter(category == "mix")
+# 
+#  # Net
+# mod_n <- lme(net_photo_h_surface ~ exp_Net_photo_ug_h_cm2, random = ~1|colony, data=mix)
+# 
+# # Res
+# mod_r <- lme(respiration_h_surface ~ exp_Resp_ug_h_cm2, random = ~1|colony, data=mix)
+# 
+# # Gross
+# mod_g <- lme(gross_photo_h_surface ~ exp_Gross_photo_ug_h_cm2, random = ~1|colony, data=mix)
+# 
+# # Calc
+# mod_c <- lme(calc_umol_cm2_h ~ exp_Calc_umol_h_cm2, random = ~1|colony, data=mix_calc)
+# 
+# 
+# # test normailty  and homogeneity of variance -> all looks good
+# hist(resid(mod_n))
+# shapiro.test(resid(mod_n)) # good 0.77
+# qqnorm(resid(mod_n))
+# plot(resid(mod_n)~fitted(mod_n))
+# 
+# hist(resid(mod_r))
+# shapiro.test(resid(mod_r)) # good 0.64
+# qqnorm(resid(mod_r))
+# plot(resid(mod_r)~fitted(mod_r))
+# 
+# hist(resid(mod_g))
+# shapiro.test(resid(mod_g)) # good 0.24
+# qqnorm(resid(mod_g))
+# plot(resid(mod_g)~fitted(mod_g))
+# 
+# hist(resid(mod_c))
+# shapiro.test(resid(mod_c)) # good 0.62
+# qqnorm(resid(mod_c))
+# plot(resid(mod_c)~fitted(mod_c))
+# 
+# 
+# # Models output
+# # This function (r.squaredGLMM)calculates the margil (fixed effects only) and conditional (including both fixed and random effects) R-squared of a multilevel/hierarchical model following  on Nakagawa et al. (2017) -Nakagawa, S., Johnson, P.C.D., Schielzeth, H. (2017) The coefficient of determination R² and intra-class correlation coefficient from generalized linear mixed-effects models revisited and expanded. J. R. Soc. Interface 14: 20170213.-  get pseudo R2  revised statistics based on Nakagawa et al. (2017) paper
+# # # The conditional R2 is the proportion of total variance explained through both fixed and random effects
+# # # Marginal R2 provides the variance explained only by fixed effects
+# 
+# summary(mod_n) #-> Intercept p<0.001, exp p=0.008
+# MuMIn::r.squaredGLMM(mod_n) # R2m: 0.06      R2c: 0.52
+# 
+# summary(mod_r)#-> Intercept p<0.001, exp p=0.036
+# MuMIn::r.squaredGLMM(mod_r)# R2m: 0.04      R2c: 0.35
+# 
+# summary(mod_g)#-> Intercept p<0.001, exp p<0.001
+# MuMIn::r.squaredGLMM(mod_g)# R2m: 0.16      R2c: 0.57
+# 
+# summary(mod_c)#-> Intercept p<0.001, exp p<0.001
+# MuMIn::r.squaredGLMM(mod_c)# R2m: 0.20      R2c: 0.33
+
+```
+
+---------- linear regression between measured and expected productivity WITHOUT colony as random factor ----------
+```{r}
+# get only diversity incubations
+mix <- Data %>%  filter(category == "mix")
+mix_calc <- Data_calc %>%  filter(category == "mix")
+
+ # Net
+mod_n <- lm(log(net_photo_h_surface) ~ exp_Net_photo_ug_h_cm2, data=mix)
+
+# Res
+mod_r <- lm(respiration_h_surface ~ exp_Resp_ug_h_cm2, data=mix)
+
+# Gross
+mod_g <- lm(log(gross_photo_h_surface) ~ exp_Gross_photo_ug_h_cm2, data=mix)
+
+# Calc
+mod_c <- lm(calc_umol_cm2_h ~ exp_Calc_umol_h_cm2, data=mix_calc)
+
+
+# test normality  and homogeneity of variance
+hist(resid(mod_n))
+shapiro.test(resid(mod_n)) # bad 0.02 -> with log transformation of dependent v. 0.8
+qqnorm(resid(mod_n))
+plot(resid(mod_n)~fitted(mod_n))
+
+hist(resid(mod_r))
+shapiro.test(resid(mod_r)) # good 0.13
+qqnorm(resid(mod_r))
+plot(resid(mod_r)~fitted(mod_r))
+
+hist(resid(mod_g))
+shapiro.test(resid(mod_g)) # bad 0.007 -> with log transformation of dependent v. 0.3
+qqnorm(resid(mod_g))
+plot(resid(mod_g)~fitted(mod_g))
+
+hist(resid(mod_c))
+shapiro.test(resid(mod_c)) # good 0.58
+qqnorm(resid(mod_c))
+plot(resid(mod_c)~fitted(mod_c))
+
+
+# Models output
+summary(mod_n) #-> Intercept p<0.001, exp p<0.001, adj. R2 =0.12
+
+summary(mod_r)#-> Intercept p<0.001, exp p=0.001, adj. R2 =0.09
+
+summary(mod_g)#-> Intercept p<0.001, exp p<0.001, adj. R2 =0.23
+
+summary(mod_c)#-> Intercept p<0.001, exp p<0.001, adj. R2 =0.25
+```
+
+
+
+---------- relationship between productivity change of diverse incubations and their expected productivity ----------
+Blomqvist method for x, y-x (stats used in Figure 5 Polyculture productivity link to monoculture performance)
+```{r include = FALSE}
+################################ Net
+mix_net <- mix %>% 
+  dplyr::select(fragment_ID, colony, exp_obs_net_photo, net_photo_h_surface, exp_Net_photo_ug_h_cm2) %>% 
+  rename(
+    base = exp_Net_photo_ug_h_cm2,
+    obs = net_photo_h_surface,
+    change = exp_obs_net_photo)
+
+# compute inter-colony variance to estimate measurement error
+t <- mix_net %>% 
+  dplyr::select(colony, fragment_ID, base) %>% 
+  full_join(mix_net %>% dplyr::select(colony, fragment_ID, base), by = 'colony') %>% 
+  filter(fragment_ID.x < fragment_ID.y) %>% 
+  mutate(diff = abs(base.x - base.y))
+
+corr <- cor.test(mix_net$change, mix_net$base, method = "pearson")
+original_correlation <- corr$estimate[[1]]
+original_correlation
+
+corr_term <- var(t$diff) / var(t$base.x)
+corrected_correlation <- (original_correlation + corr_term) / (1 - corr_term)
+corrected_correlation
+
+
+# confidence intervalls based on Fisher z transformation
+r.cint <- function(r,n,level=.95) {
+ z <- 0.5*log((1+r)/(1-r))
+ zse <- 1/sqrt(n-3)
+ zmin <- z - zse * qnorm((1-level)/2,lower.tail=FALSE)
+ zmax <- z + zse * qnorm((1-level)/2,lower.tail=FALSE)
+ return(c((exp(2*zmin)-1)/(exp(2*zmin)+1),(exp(2*zmax)-1)/(exp(2*zmax)+1)))
+}
+
+r.cint(corrected_correlation, length(mix$exp_Net_photo_ug_h_cm2))
+
+# p value based on Fisher z transformation
+z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
+zse <- 1/(sqrt(length(mix$exp_Net_photo_ug_h_cm2)-3))
+
+z_blom <- z(corrected_correlation)
+
+ min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+
+#Net original: -0.69, corrected: -0.22 Conf 95%(-0.40 to -0.03), p= 0.02
+ 
+ 
+####################################### Resp
+mix_res <- mix %>% 
+  dplyr::select(fragment_ID, colony, exp_obs_respiration, respiration_h_surface, exp_Resp_ug_h_cm2) %>% 
+  rename(
+    base = exp_Resp_ug_h_cm2,
+    obs = respiration_h_surface,
+    change = exp_obs_respiration)
+
+# compute inter-colony variance to estimate measurement error
+t <- mix_res %>% 
+  dplyr::select(colony, fragment_ID, base) %>% 
+  full_join(mix_res %>% dplyr::select(colony, fragment_ID, base), by = 'colony') %>% 
+  filter(fragment_ID.x < fragment_ID.y) %>% 
+  mutate(diff = abs(base.x - base.y))
+
+corr <- cor.test(mix_res$change, mix_res$base, method = "pearson")
+original_correlation <- corr$estimate[[1]]
+original_correlation
+
+corr_term <- var(t$diff) / var(t$base.x)
+corrected_correlation <- (original_correlation + corr_term) / (1 - corr_term)
+corrected_correlation
+
+
+# confidence intervalls based on Fisher z transformation
+r.cint <- function(r,n,level=.95) {
+ z <- 0.5*log((1+r)/(1-r))
+ zse <- 1/sqrt(n-3)
+ zmin <- z - zse * qnorm((1-level)/2,lower.tail=FALSE)
+ zmax <- z + zse * qnorm((1-level)/2,lower.tail=FALSE)
+ return(c((exp(2*zmin)-1)/(exp(2*zmin)+1),(exp(2*zmax)-1)/(exp(2*zmax)+1)))
+}
+
+r.cint(corrected_correlation, length(mix$exp_Resp_ug_h_cm2))
+
+# p value based on Fisher z transformation
+z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
+zse <- 1/(sqrt(length(mix$exp_Resp_ug_h_cm2)-3))
+
+z_blom <- z(corrected_correlation)
+
+ min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+
+ #Resp original: -0.62, corrected: -0.29 Conf 95%(-0.46 to -0.11), p= 0.002 
+ 
+ 
+ ################################ Gross
+mix_gross <- mix %>% 
+  dplyr::select(fragment_ID, colony, exp_obs_gross_photo, gross_photo_h_surface, exp_Gross_photo_ug_h_cm2) %>% 
+  rename(
+    base = exp_Gross_photo_ug_h_cm2,
+    obs = gross_photo_h_surface,
+    change = exp_obs_gross_photo)
+
+# compute inter-colony variance to estimate measurement error
+t <- mix_gross %>% 
+  dplyr::select(colony, fragment_ID, base) %>% 
+  full_join(mix_gross %>% dplyr::select(colony, fragment_ID, base), by = 'colony') %>% 
+  filter(fragment_ID.x < fragment_ID.y) %>% 
+  mutate(diff = abs(base.x - base.y))
+
+corr <- cor.test(mix_gross$change, mix_gross$base, method = "pearson")
+original_correlation <- corr$estimate[[1]]
+original_correlation
+
+corr_term <- var(t$diff) / var(t$base.x)
+corrected_correlation <- (original_correlation + corr_term) / (1 - corr_term)
+corrected_correlation
+
+
+# confidence intervalls based on Fisher z transformation
+r.cint <- function(r,n,level=.95) {
+ z <- 0.5*log((1+r)/(1-r))
+ zse <- 1/sqrt(n-3)
+ zmin <- z - zse * qnorm((1-level)/2,lower.tail=FALSE)
+ zmax <- z + zse * qnorm((1-level)/2,lower.tail=FALSE)
+ return(c((exp(2*zmin)-1)/(exp(2*zmin)+1),(exp(2*zmax)-1)/(exp(2*zmax)+1)))
+}
+
+r.cint(corrected_correlation, length(mix$exp_Gross_photo_ug_h_cm2))
+
+# p value based on Fisher z transformation
+z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
+zse <- 1/(sqrt(length(mix$exp_Gross_photo_ug_h_cm2)-3))
+
+z_blom <- z(corrected_correlation)
+
+ min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+
+#gross original: -0.56, corrected: -0.34 Conf 95%(-0.5 to -0.16), p= 0.0004
+ 
+ 
+ ################################ Calc
+mix_cal <- mix_calc %>% 
+  dplyr::select(fragment_ID, colony, exp_obs_calc, calc_umol_cm2_h, exp_Calc_umol_h_cm2) %>% 
+  rename(
+    base = exp_Calc_umol_h_cm2,
+    obs = calc_umol_cm2_h,
+    change = exp_obs_calc)
+
+# compute inter-colony variance to estimate measurement error
+t <- mix_cal %>% 
+  dplyr::select(colony, fragment_ID, base) %>% 
+  full_join(mix_cal %>% dplyr::select(colony, fragment_ID, base), by = 'colony') %>% 
+  filter(fragment_ID.x < fragment_ID.y) %>% 
+  mutate(diff = abs(base.x - base.y))
+
+corr <- cor.test(mix_cal$change, mix_cal$base, method = "pearson")
+original_correlation <- corr$estimate[[1]]
+original_correlation
+
+corr_term <- var(t$diff) / var(t$base.x)
+corrected_correlation <- (original_correlation + corr_term) / (1 - corr_term)
+corrected_correlation
+
+
+# confidence intervalls based on Fisher z transformation
+r.cint <- function(r,n,level=.95) {
+ z <- 0.5*log((1+r)/(1-r))
+ zse <- 1/sqrt(n-3)
+ zmin <- z - zse * qnorm((1-level)/2,lower.tail=FALSE)
+ zmax <- z + zse * qnorm((1-level)/2,lower.tail=FALSE)
+ return(c((exp(2*zmin)-1)/(exp(2*zmin)+1),(exp(2*zmax)-1)/(exp(2*zmax)+1)))
+}
+
+r.cint(corrected_correlation, length(mix$exp_Calc_umol_h_cm2))
+
+# p value based on Fisher z transformation
+z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
+zse <- 1/(sqrt(length(mix$exp_Calc_umol_h_cm2)-3))
+
+z_blom <- z(corrected_correlation)
+
+ min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+
+#Calc original: -0.43, corrected: 0.12 Conf 95%(-0.07 to 0.31), p= 0.2 -> non sig.
+```
+
+
+---------- Figure 5: Polyculture productivity link to monoculture performance ----------
+```{r}
+theme <-theme_classic() +
+        theme(
+        plot.margin = unit(c(1,0.2,0.2,1), "cm"),
+        axis.text.x = element_text(size = 14, color = "black"),
+        axis.title.x= element_text(size= 14, face ="bold",margin=margin(10,0,0,0), hjust = 0.5),
+        axis.text.y = element_text(size = 14, vjust = 0.5, color = "black"),
+        axis.title.y =element_text(hjust = 0.5, size=14,face="bold",margin=margin(0,12,0,0)))
+
+theme_gross <-theme_classic() +
+        theme(
+        plot.margin = unit(c(1,0.2,0.2,1), "cm"),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.title.x= element_text(size= 16, face ="bold",margin=margin(10,0,0,0), hjust = 0.5),
+        axis.text.y = element_text(size = 16, vjust = 0.5, color = "black"),
+        axis.title.y =element_text(hjust = 0.5, size=16,face="bold",margin=margin(0,12,0,0)))
+
+# Figure 5 a-c
+
+ net1 <-ggplot(mix, aes( y = net_photo_h_surface, x = exp_Net_photo_ug_h_cm2 )) +
+  geom_point(size=2) +
+  geom_abline(intercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 23, y=43, label = "adj. R² = 0.12, p < 0.001", size=4, fontface="bold") +
+  scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  scale_y_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  xlab(expression(bold(atop("Expected net photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  ylab(expression(bold(atop("Measured net photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+   theme
+
+
+resp2 <-ggplot(mix, aes( x = exp_Resp_ug_h_cm2, y = respiration_h_surface)) +
+  geom_point(size=2) +
+  geom_abline(intercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 23, y=43, label = "adj. R² = 0.09, p = 0.001", size=4, fontface="bold") +
+  scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  scale_y_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  xlab(expression(bold(atop("Expected respiration", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  ylab(expression(bold(atop("Measured respiration", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+   theme
+
+gross3 <-ggplot(mix, aes( x =  exp_Gross_photo_ug_h_cm2, y = gross_photo_h_surface)) +
+  geom_point(size=2.5) +
+  geom_abline(intercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 54, y=72, label = "adj. R² = 0.23, p < 0.001", size=5, fontface="bold") + 
+  scale_x_continuous(limits = c(15, 72), breaks = seq(20,70, by = 10))+
+  scale_y_continuous(limits = c(15, 72), breaks = seq(20, 70, by = 10))+
+  xlab(expression(bold(atop("Expected gross photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  ylab(expression(bold(atop("Measured gross photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+   theme_gross
+
+calc4 <-ggplot(mix_calc, aes(x = exp_Calc_umol_h_cm2, y = calc_umol_cm2_h)) +
+  geom_point(size=2) +
+  geom_abline(intercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 0.8, y=1.53, label = "adj. R² = 0.25, p < 0.001", size=4, fontface="bold") +
+  scale_x_continuous(limits = c(-0.02, 1.53), breaks = seq(0, 1.5 , by = 0.5))+
+  scale_y_continuous(limits = c(-0.02, 1.53), breaks = seq(0, 1.5, by = 0.5))+
+  xlab(expression(bold(atop("Expected calcification", paste ("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
+  ylab(expression(bold(atop("Measured calcification", paste("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
+   theme
+```
+
+```{r}
+#Figure 5 e-g
+# Note: Graph is slightly misleading, because of mathematical coupling of the varaiables x, y-x
+
+b5 <- ggplot(mix, aes(x = exp_Net_photo_ug_h_cm2, y = exp_obs_net_photo)) +
+  geom_point(size=2) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 26, y=24, label = "adj. R = -0.22, p = 0.02", size=4, fontface="bold") +
+  xlab(expression(bold(atop("Expected net photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+   ylab(expression(bold(atop("Change from expected net", paste("photosynthesis (μg O"[2]," cm" ^-2," h" ^-1,")")))))+
+ # scale_x_continuous(limits = c(13, 40), breaks = seq(15, 40, by = 10))+
+  #scale_y_continuous(limits = c(-22, 22), breaks = seq(-20, 20, by = 10))+
+  scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  scale_y_continuous(limits = c(-22, 24), breaks = seq(-20, 20, by = 10))+
+  theme
+
+b6 <-ggplot(mix, aes(x = exp_Resp_ug_h_cm2, y = exp_obs_respiration)) +
+  geom_point(size=2) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 26, y=24, label = "adj. R = -0.29, p = 0.002", size=4, fontface="bold") +
+  xlab(expression(bold(atop("Expected respiration", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+   ylab(expression(bold(atop("Change from expected respiration", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  scale_y_continuous(limits = c(-22, 24), breaks = seq(-20, 20, by = 10))+
+      theme
+
+b7 <-ggplot(mix, aes(x = exp_Gross_photo_ug_h_cm2, y = exp_obs_gross_photo)) +
+  geom_point(size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 54, y=34, label = "adj. R = -0.34, p < 0.001", size=5, fontface="bold") +
+  labs(color = "Productivity score\n(\U03A3\ of medians in monoculture)") +
+  xlab(expression(bold(atop("Expected gross photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+   ylab(expression(bold(atop("Change from expecte gross photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  scale_x_continuous(limits = c(20, 72), breaks = seq(20, 70, by = 10))+
+  scale_y_continuous(limits = c(-30, 34), breaks = seq(-30, 30, by = 10))+
+      theme_gross
+
+b8 <-ggplot(mix_calc, aes(x = exp_Calc_umol_h_cm2, y = exp_obs_calc)) +
+  geom_point(size=2) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 0.95, y=1, label = "adj. R = 0.12, p = 0.2", size=4, fontface="bold") +
+xlab(expression(bold(atop("Expected calcification", paste ("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
+   ylab(expression(bold(atop("Change from expected calcification", paste("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
+  scale_x_continuous(limits = c(-0.02,1.53), breaks = seq(0, 1.5, by = 0.5))+
+  scale_y_continuous(limits = c(-1, 1), breaks = seq(-1, 1, by = 0.5))+
+      theme
+```
+
+```{r}
+# combine graphs measured vs expected and change from expected vs expected
+
+# all O2
+expObs_bruno_med <- ggarrange(
+          net1,resp2,gross3,b5, b6, b7,
+          labels = c("a)", "b)", "c)", " d)"," e)","  f)"),
+          label.x = 0.23,
+          label.y = 0.95,
+          ncol = 3, nrow=2,
+          hjust = -0.5,
+          vjust = 0)
+
+ggsave("Graphs/Mix_allO2_expobs_bruno.png", width=14.5, height= 10, limitsize=FALSE, dpi= 700, expObs_bruno_med)
+
+# all Calc
+expObs_bruno_med_calc <- ggarrange(
+          calc4, b8,
+          labels = c("a)", "b)"),
+          label.x = 0.12,
+          label.y = 0.965,
+          ncol = 2, nrow=1,
+          hjust = -0.5,
+          vjust = 0)
+
+ggsave("Graphs/Mix_calc_expobs_bruno.png", width=15, height= 10, limitsize=FALSE, dpi= 700, expObs_bruno_med_calc)
+```
+
+
+
+
+
+--- For conspecific incubations-----
+
+---------- linear regression between measured and expected productivity ----------
+```{r}
+# get only conspecific incubations
+con <- Data %>%  filter(category == "conspecific")
+con_calc <- Data_calc %>%  filter(category == "conspecific")
+
+ # Net
+mod_n_con <- lm(net_photo_h_surface ~ exp_Net_photo_ug_h_cm2, data=con)
+
+# Res
+mod_r_con <- lm(respiration_h_surface ~ exp_Resp_ug_h_cm2, data=con)
+
+# Gross
+mod_g_con <- lm(gross_photo_h_surface ~ exp_Gross_photo_ug_h_cm2, data=con)
+
+# Calc
+mod_c_con <- lm(calc_umol_cm2_h ~ exp_Calc_umol_h_cm2, data=con_calc)
+
+
+# test normailty  and homogeneity of variance -> all looks good
+hist(resid(mod_n_con))
+shapiro.test(resid(mod_n_con)) # good 0.77
+qqnorm(resid(mod_n_con))
+plot(resid(mod_n_con)~fitted(mod_n_con))
+
+hist(resid(mod_r_con))
+shapiro.test(resid(mod_r_con)) # good 0.60
+qqnorm(resid(mod_r_con))
+plot(resid(mod_r_con)~fitted(mod_r_con))
+
+hist(resid(mod_g_con))
+shapiro.test(resid(mod_g_con)) # good 0.92
+qqnorm(resid(mod_g_con))
+plot(resid(mod_g_con)~fitted(mod_g_con))
+
+hist(resid(mod_c_con))
+shapiro.test(resid(mod_c_con)) # good 0.28
+qqnorm(resid(mod_c_con))
+plot(resid(mod_c_con)~fitted(mod_c_con))
+
+
+# Models output
+# This function (r.squaredGLMM)calculates the margil (fixed effects only) and conditional (including both fixed and random effects) R-squared of a multilevel/hierarchical model following  on Nakagawa et al. (2017) -Nakagawa, S., Johnson, P.C.D., Schielzeth, H. (2017) The coefficient of determination R² and intra-class correlation coefficient from generalized linear mixed-effects models revisited and expanded. J. R. Soc. Interface 14: 20170213.-  get pseudo R2  revised statistics based on Nakagawa et al. (2017) paper
+# # The conditional R2 is the proportion of total variance explained through both fixed and random effects
+# # Marginal R2 provides the variance explained only by fixed effects
+
+summary(mod_n_con) #-> Intercept p<0.001, exp p=0.02, adj. R2: 0.09
+
+summary(mod_r_con)#-> Intercept p<0.001, exp p<0.001, adj. R2: 0.21
+
+summary(mod_g_con)#-> Intercept p<0.001, exp p=0.002, adj. R2: 0.17
+
+summary(mod_c_con)#-> Intercept p=0.003, exp p<0.001, adj. R2: 0.60
+
+```
+
+
+
+---------- relationship between productivity change of conspecific incubations and their expected productivity ----------
+Blomqvist method for x, y-x (stats used in Figure 5 Polyculture productivity link to monoculture performance)
+```{r include = FALSE}
+################################ Net
+con_net <- con %>% 
+  dplyr::select(fragment_ID, colony, exp_obs_net_photo, net_photo_h_surface, exp_Net_photo_ug_h_cm2) %>% 
+  rename(
+    base = exp_Net_photo_ug_h_cm2,
+    obs = net_photo_h_surface,
+    change = exp_obs_net_photo)
+
+# compute inter-colony variance to estimate measurement error
+t <- con_net %>% 
+  dplyr::select(colony, fragment_ID, base) %>% 
+  full_join(con_net %>% dplyr::select(colony, fragment_ID, base), by = 'colony') %>% 
+  filter(fragment_ID.x < fragment_ID.y) %>% 
+  mutate(diff = abs(base.x - base.y))
+
+corr <- cor.test(con_net$change, con_net$base, method = "pearson")
+original_correlation <- corr$estimate[[1]]
+original_correlation
+
+corr_term <- var(t$diff) / var(t$base.x)
+corrected_correlation <- (original_correlation + corr_term) / (1 - corr_term)
+corrected_correlation
+
+
+# confidence intervalls based on Fisher z transformation
+r.cint <- function(r,n,level=.95) {
+ z <- 0.5*log((1+r)/(1-r))
+ zse <- 1/sqrt(n-3)
+ zmin <- z - zse * qnorm((1-level)/2,lower.tail=FALSE)
+ zmax <- z + zse * qnorm((1-level)/2,lower.tail=FALSE)
+ return(c((exp(2*zmin)-1)/(exp(2*zmin)+1),(exp(2*zmax)-1)/(exp(2*zmax)+1)))
+}
+
+r.cint(corrected_correlation, length(con$exp_Net_photo_ug_h_cm2))
+
+# p value based on Fisher z transformation
+z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
+zse <- 1/(sqrt(length(con$exp_Net_photo_ug_h_cm2)-3))
+
+z_blom <- z(corrected_correlation)
+
+ min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+
+#Net original: -0.73, corrected: -0.65 Conf 95%(-0.79 to -0.46), p< 0.001
+ 
+ 
+####################################### Resp
+con_res <- con %>% 
+  dplyr::select(fragment_ID, colony, exp_obs_respiration, respiration_h_surface, exp_Resp_ug_h_cm2) %>% 
+  rename(
+    base = exp_Resp_ug_h_cm2,
+    obs = respiration_h_surface,
+    change = exp_obs_respiration)
+
+# compute inter-colony variance to estimate measurement error
+t <- con_res %>% 
+  dplyr::select(colony, fragment_ID, base) %>% 
+  full_join(con_res %>% dplyr::select(colony, fragment_ID, base), by = 'colony') %>% 
+  filter(fragment_ID.x < fragment_ID.y) %>% 
+  mutate(diff = abs(base.x - base.y))
+
+corr <- cor.test(con_res$change, con_res$base, method = "pearson")
+original_correlation <- corr$estimate[[1]]
+original_correlation
+
+corr_term <- var(t$diff) / var(t$base.x)
+corrected_correlation <- (original_correlation + corr_term) / (1 - corr_term)
+corrected_correlation
+
+
+# confidence intervalls based on Fisher z transformation
+r.cint <- function(r,n,level=.95) {
+ z <- 0.5*log((1+r)/(1-r))
+ zse <- 1/sqrt(n-3)
+ zmin <- z - zse * qnorm((1-level)/2,lower.tail=FALSE)
+ zmax <- z + zse * qnorm((1-level)/2,lower.tail=FALSE)
+ return(c((exp(2*zmin)-1)/(exp(2*zmin)+1),(exp(2*zmax)-1)/(exp(2*zmax)+1)))
+}
+
+r.cint(corrected_correlation, length(con$exp_Resp_ug_h_cm2))
+
+# p value based on Fisher z transformation
+z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
+zse <- 1/(sqrt(length(con$exp_Resp_ug_h_cm2)-3))
+
+z_blom <- z(corrected_correlation)
+
+ min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+
+ #Resp original: -0.50, corrected: -0.25 Conf 95%(-0.49 to 0.03), p= 0.08 -> non sig.
+ 
+ 
+ ################################ Gross
+con_gross <- con %>% 
+  dplyr::select(fragment_ID, colony, exp_obs_gross_photo, gross_photo_h_surface, exp_Gross_photo_ug_h_cm2) %>% 
+  rename(
+    base = exp_Gross_photo_ug_h_cm2,
+    obs = gross_photo_h_surface,
+    change = exp_obs_gross_photo)
+
+# compute inter-colony variance to estimate measurement error
+t <- con_gross %>% 
+  dplyr::select(colony, fragment_ID, base) %>% 
+  full_join(con_gross %>% dplyr::select(colony, fragment_ID, base), by = 'colony') %>% 
+  filter(fragment_ID.x < fragment_ID.y) %>% 
+  mutate(diff = abs(base.x - base.y))
+
+corr <- cor.test(con_gross$change, con_gross$base, method = "pearson")
+original_correlation <- corr$estimate[[1]]
+original_correlation
+
+corr_term <- var(t$diff) / var(t$base.x)
+corrected_correlation <- (original_correlation + corr_term) / (1 - corr_term)
+corrected_correlation
+
+
+# confidence intervalls based on Fisher z transformation
+r.cint <- function(r,n,level=.95) {
+ z <- 0.5*log((1+r)/(1-r))
+ zse <- 1/sqrt(n-3)
+ zmin <- z - zse * qnorm((1-level)/2,lower.tail=FALSE)
+ zmax <- z + zse * qnorm((1-level)/2,lower.tail=FALSE)
+ return(c((exp(2*zmin)-1)/(exp(2*zmin)+1),(exp(2*zmax)-1)/(exp(2*zmax)+1)))
+}
+
+r.cint(corrected_correlation, length(con$exp_Gross_photo_ug_h_cm2))
+
+# p value based on Fisher z transformation
+z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
+zse <- 1/(sqrt(length(con$exp_Gross_photo_ug_h_cm2)-3))
+
+z_blom <- z(corrected_correlation)
+
+ min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+
+#gross original: -0.59, corrected: -0.47 Conf 95%(-0.66 to -0.23), p= 0.0004
+ 
+ 
+ ################################ Calc
+con_cal <- con_calc %>% 
+  dplyr::select(fragment_ID, colony, exp_obs_calc, calc_umol_cm2_h, exp_Calc_umol_h_cm2) %>% 
+  rename(
+    base = exp_Calc_umol_h_cm2,
+    obs = calc_umol_cm2_h,
+    change = exp_obs_calc)
+
+# compute inter-colony variance to estimate measurement error
+t <- con_cal %>% 
+  dplyr::select(colony, fragment_ID, base) %>% 
+  full_join(con_cal %>% dplyr::select(colony, fragment_ID, base), by = 'colony') %>% 
+  filter(fragment_ID.x < fragment_ID.y) %>% 
+  mutate(diff = abs(base.x - base.y))
+
+corr <- cor.test(con_cal$change, con_cal$base, method = "pearson")
+original_correlation <- corr$estimate[[1]]
+original_correlation
+
+corr_term <- var(t$diff) / var(t$base.x)
+corrected_correlation <- (original_correlation + corr_term) / (1 - corr_term)
+corrected_correlation
+
+
+# confidence intervalls based on Fisher z transformation
+r.cint <- function(r,n,level=.95) {
+ z <- 0.5*log((1+r)/(1-r))
+ zse <- 1/sqrt(n-3)
+ zmin <- z - zse * qnorm((1-level)/2,lower.tail=FALSE)
+ zmax <- z + zse * qnorm((1-level)/2,lower.tail=FALSE)
+ return(c((exp(2*zmin)-1)/(exp(2*zmin)+1),(exp(2*zmax)-1)/(exp(2*zmax)+1)))
+}
+
+r.cint(corrected_correlation, length(con$exp_Calc_umol_h_cm2))
+
+# p value based on Fisher z transformation
+z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
+zse <- 1/(sqrt(length(con$exp_Calc_umol_h_cm2)-3))
+
+z_blom <- z(corrected_correlation)
+
+ min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+
+#Calc original: -0.45, corrected: -0.21 Conf 95%(-0.46 to 0.07), p= 0.14 -> non sig.
+```
+
+
+---------- Figure 5: Polyculture productivity link to monoculture performance ----------
+```{r}
+theme <-theme_classic() +
+        theme(
+        plot.margin = unit(c(1,0.2,0.2,1), "cm"),
+        axis.text.x = element_text(size = 14, color = "black"),
+        axis.title.x= element_text(size= 14, face ="bold",margin=margin(10,0,0,0), hjust = 0.5),
+        axis.text.y = element_text(size = 14, vjust = 0.5, color = "black"),
+        axis.title.y =element_text(hjust = 0.5, size=14,face="bold",margin=margin(0,12,0,0)))
+
+theme_gross <-theme_classic() +
+        theme(
+        plot.margin = unit(c(1,0.2,0.2,1), "cm"),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.title.x= element_text(size= 16, face ="bold",margin=margin(10,0,0,0), hjust = 0.5),
+        axis.text.y = element_text(size = 16, vjust = 0.5, color = "black"),
+        axis.title.y =element_text(hjust = 0.5, size=16,face="bold",margin=margin(0,12,0,0)))
+
+# Figure 5 a-c
+
+ net1_con <-ggplot(con, aes( y = net_photo_h_surface, x = exp_Net_photo_ug_h_cm2 )) +
+  geom_point(size=2) +
+  geom_abline(intercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 23, y=43, label = "adj. R² = 0.09, p < 0.001", size=4, fontface="bold") +
+  scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  scale_y_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  xlab(expression(bold(atop("Expected net photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  ylab(expression(bold(atop("Measured net photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+   theme
+
+
+resp2_con <-ggplot(con, aes( x = exp_Resp_ug_h_cm2, y = respiration_h_surface)) +
+  geom_point(size=2) +
+  geom_abline(intercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 23, y=43, label = "adj. R² = 0.21, p < 0.001", size=4, fontface="bold") +
+  scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  scale_y_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  xlab(expression(bold(atop("Expected respiration", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  ylab(expression(bold(atop("Measured respiration", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+   theme
+
+gross3_con <-ggplot(con, aes( x =  exp_Gross_photo_ug_h_cm2, y = gross_photo_h_surface)) +
+  geom_point(size=2.5) +
+  geom_abline(intercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 54, y=72, label = "adj. R² = 0.17, p < 0.001", size=5, fontface="bold") + 
+  scale_x_continuous(limits = c(15, 72), breaks = seq(20,70, by = 10))+
+  scale_y_continuous(limits = c(15, 72), breaks = seq(20, 70, by = 10))+
+  xlab(expression(bold(atop("Expected gross photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  ylab(expression(bold(atop("Measured gross photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+   theme_gross
+
+calc4_con <-ggplot(con_calc, aes(x = exp_Calc_umol_h_cm2, y = calc_umol_cm2_h)) +
+  geom_point(size=2) +
+  geom_abline(intercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 0.8, y=1.53, label = "adj. R² = 0.60, p = 0.003", size=4, fontface="bold") +
+  scale_x_continuous(limits = c(-0.02, 1.53), breaks = seq(0, 1.5 , by = 0.5))+
+  scale_y_continuous(limits = c(-0.02, 1.53), breaks = seq(0, 1.5, by = 0.5))+
+  xlab(expression(bold(atop("Expected calcification", paste ("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
+  ylab(expression(bold(atop("Measured calcification", paste("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
+   theme
+```
+
+```{r}
+#Figure 5 e-g
+# Note: Graph is slightly misleading, because of mathematical coupling of the varaiables x, y-x
+
+b5_con <- ggplot(con, aes(x = exp_Net_photo_ug_h_cm2, y = exp_obs_net_photo)) +
+  geom_point(size=2) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 26, y=24, label = "adj. R = -0.65, p < 0.001", size=4, fontface="bold") +
+  xlab(expression(bold(atop("Expected net photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+   ylab(expression(bold(atop("Change from expected net", paste("photosynthesis (μg O"[2]," cm" ^-2," h" ^-1,")")))))+
+  scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  scale_y_continuous(limits = c(-22, 24), breaks = seq(-20, 20, by = 10))+
+  theme
+
+b6_con <-ggplot(con, aes(x = exp_Resp_ug_h_cm2, y = exp_obs_respiration)) +
+  geom_point(size=2) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 26, y=24, label = "adj. R = -0.25, p = 0.08", size=4, fontface="bold") +
+  xlab(expression(bold(atop("Expected respiration", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+   ylab(expression(bold(atop("Change from expected respiration", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  scale_y_continuous(limits = c(-22, 24), breaks = seq(-20, 20, by = 10))+
+      theme
+
+b7_con <-ggplot(con, aes(x = exp_Gross_photo_ug_h_cm2, y = exp_obs_gross_photo)) +
+  geom_point(size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 54, y=34, label = "adj. R = -0.47, p < 0.001", size=5, fontface="bold") +
+  labs(color = "Productivity score\n(\U03A3\ of medians in monoculture)") +
+  xlab(expression(bold(atop("Expected gross photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+   ylab(expression(bold(atop("Change from expected gross photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  scale_x_continuous(limits = c(20, 72), breaks = seq(20, 70, by = 10))+
+  scale_y_continuous(limits = c(-30, 34), breaks = seq(-30, 30, by = 10))+
+      theme_gross
+
+b8_con <-ggplot(con_calc, aes(x = exp_Calc_umol_h_cm2, y = exp_obs_calc)) +
+  geom_point(size=2) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  annotate("text", x= 0.95, y=1, label = "adj. R = -0.21, p = 0.14", size=4, fontface="bold") +
+ xlab(expression(bold(atop("Expected calcification", paste ("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
+   ylab(expression(bold(atop("Change from expected calcification", paste("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
+  scale_x_continuous(limits = c(-0.02,1.53), breaks = seq(0, 1.5, by = 0.5))+
+  scale_y_continuous(limits = c(-1, 1), breaks = seq(-1, 1, by = 0.5))+
+      theme
+```
+
+
+Graph with conspecific and Multi-family
+```{r}
+# combine graphs measured vs expected and change from expected vs expected
+
+# Gross photo for results
+
+expObs_bruno_med_con_mix_gross <-
+   gross3_con + gross3 +b7_con +b7+
+          plot_layout( ncol = 2, nrow =2) +
+          plot_annotation( title = "                                                   Conspecific                                                                                     Multi-family",tag_levels = list(c("a)","c)", "b)", "d)"))) &
+          theme(plot.tag = element_text(size = 18, face="bold"),
+                plot.tag.position = c(0.07,0.99),
+                plot.title= element_text(size = 16, face="bold"),
+                legend.position = "none")
+
+ggsave("Graphs/con_mix_gross_expobs_bruno.png", width=13, height= 10, limitsize=FALSE, dpi= 700, expObs_bruno_med_con_mix_gross)
+
+# rest for appendix
+#conspecific
+expObs_bruno_med_con_rest <-
+   net1_con + b5_con + resp2_con + b6_con + calc4_con + b8_con +
+          plot_layout( ncol = 2, nrow =3) +
+          plot_annotation( title = "                                                                       Conspecific",tag_levels = list(c("a)","d)", "b)", "e)", "c)", "f)"))) &
+          theme(plot.tag = element_text(size = 16, face="bold"),
+                plot.tag.position = c(0.14,0.99),
+                plot.title= element_text(size = 16, face="bold"),
+                legend.position = "none")
+
+ggsave("Graphs/con_rest_expobs_bruno.png", width=10, height= 12, limitsize=FALSE, dpi= 700, expObs_bruno_med_con_rest)
+
+#multi-family
+expObs_bruno_med_mix_rest <-
+   net1 + b5 +  resp2 + b6 +  calc4 + b8 +
+          plot_layout( ncol = 2, nrow =3) +
+      plot_annotation( title = "                                                                         Multi-family",tag_levels = list(c("a)","d)", "b)", "e)", "c)", "f)"))) &
+          theme(plot.tag = element_text(size = 16, face="bold"),
+                plot.tag.position = c(0.14,0.99),
+                plot.title= element_text(size = 16, face="bold"),
+                legend.position = "none")
+
+ggsave("Graphs/mix_rest_expobs_bruno.png", width=10, height= 12, limitsize=FALSE, dpi= 700, expObs_bruno_med_mix_rest)
+
+```

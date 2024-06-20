@@ -1,0 +1,18 @@
+```{r}
+# all used packages
+install.packages(c("tidyverse",
+                   "lubridate",
+                   "ggpubr",
+                   "oce",
+                   "rstatix",
+                   "patchwork",
+                   "nlme",
+                   "multcomp",
+                   "car",
+                   "emmeans",
+                   "ggtext",
+                   "ggrepel",
+                   "MuMIn"
+))
+```
+

@@ -1,0 +1,202 @@
+
+---------- load packages ----------
+```{r, include = FALSE}
+library(tidyverse)
+library(oce)
+```
+
+
+---------- Import csv files (titration output files) ----------
+```{r, include=FALSE}
+# get pathways of all csv files in the several subfolders
+listof <- list.files(path="Data/Titrationen", recursive=T, pattern="*.csv", full.names = T) %>%
+  str_subset(pattern=".*/CSV/.*") 
+
+# drop all pathways which are not the titration output (e.g. results calculated by titrator)
+listoff <- listof %>%
+str_subset(., "Alkalinity_preT7(?=_)") #names that have Alkalinity_preT7 followed by a '_' 
+
+
+# Import all files in a single tibble
+read_flnm <- function(x) {
+  read_delim(x, delim = ";",
+                locale = readr::locale(encoding = "latin1")) %>% 
+                mutate(Filename = x)
+}
+
+Flnm <- listoff %>% map_df(~read_flnm(.)) 
+
+#str(Flnm_all)
+
+# delete unnecessary part of the filename in each row
+Flnm$Filename <- str_sub(Flnm$Filename, -43)
+
+# Format in a more convenient way
+Flnm_clean <- Flnm %>%
+    # replace "-" 'cause R sees it as an operator ...
+  mutate(Filename = str_replace(Filename, "-", "_")) %>% 
+  #remove .csv
+  mutate(Filename = gsub(".csv", "", Filename)) %>% 
+  #remove []
+  mutate(Filename = gsub("\\[1]", "", Filename)) %>% 
+  #delete empty space
+  mutate(Filename = gsub(" ", "", Filename)) %>% 
+  #change Temperature name
+  rename(Temp = `°C`)                                            
+
+rm(listof, listoff, read_flnm, Flnm)
+```
+
+
+---------- Get summary file to match titration output with incubations ----------
+```{r, include = FALSE}
+Summary <- list.files(path="Data/Titrationen/Titration_summaries", pattern="*.csv", full.names = T) %>% 
+            map_df(~read_csv2(.)) # Usually the summary output of the titrator is used, yet for day 2,4 and 5 these files are missing in the 'raw data', therefore a selfmade summary file is used.
+
+# Extract necessary columns and delete old results
+Summary <- Summary %>%  dplyr::select(c("assemblages", "jar", "run", "day", "file_name"))
+
+# Change filename
+Summary <- Summary %>% 
+          mutate(file_name = str_replace(file_name, "-", "_")) %>% 
+          mutate(file_name = gsub("\\[1]", "", file_name)) %>% 
+          mutate(file_name = gsub(".csv", "", file_name)) %>% 
+          mutate(file_name = gsub(" ", "", file_name)) 
+
+# Check if filenames in Summary and Flnm match or something is misspelled 
+Nr_matchingSIDs <- length(intersect(Flnm_clean$Filename, Summary$file_name)) 
+Nr_SIDs <- length(unique(Flnm_clean$Filename))
+
+ifelse(Nr_matchingSIDs - Nr_SIDs == 0, "All good, you can continue",
+       stop("*** Sample IDs don't match ***\n -> cross-check the 2 tibbles to find the mismatch", call. = F ))
+
+
+# Join Titrator output and hand made summary table
+Titr_join<- full_join(Flnm_clean, Summary, by= c("Filename" = "file_name"))
+
+# Include Salinity row per day
+Titr_join <- Titr_join %>% 
+            mutate(S = as.numeric(case_when( day == "day1" ~ "34.0",
+                                             day == "day2" ~ "34.2",
+                                             day == "day3" ~ "34.4",
+                                             day == "day4" ~ "34.6",
+                                             day == "day5" ~ "35.0",
+                                             day == "day6" ~ "35.1",
+                                             day == "day7" ~ "35.3",
+                                             day == "day8" ~ "35.4",
+                                             day == "day9" ~ "35.5",
+                                             day == "day10" ~ "35.6",
+                                             day == "day11" ~ "35.5",
+                                             day == "day12" ~ "35.6",
+                                             day == "day13" ~ "35.6",
+                                             day == "day14" ~ "35.6",
+                                             day == "day15" ~ "35.6",
+                                             day == "day16" ~ "35.4",
+                                             day == "day17" ~ "35.5")))
+
+# Include Weight per Titration sample (always 30 g)
+Titr_join$Ws <- as.numeric("30.00")
+
+# 3 Incubations have missing alkalinity measurements (something went wrong in the lab)
+# These are: 1) Day 5, run 1, Acy_B1-Acy_D1-Acy_A1; 2) Day 11, run 1, Pda_D2 (Glas umgefallen, an Tag 16 wiederholt); 3) Day 15, run 2, Plo_B1 (Titrator fehler)
+Na_rows <- Titr_join %>% filter(is.na(ml))
+
+#filter out the these wrong titrations, otherwise TA_Gran() crashes
+Titr_join <- drop_na(Titr_join)
+
+rm(Nr_matchingSIDs, Nr_SIDs)
+```
+
+
+----------  Convert the tibble into a list of tibbles, where each tibble contains a single titration & the name of the tibble in the list is its Filename ---------- 
+```{r}
+Titr_comp <- as_tibble(Titr_join)
+
+ # Function to split the tibble by group (Filename)
+named_group_split <- function(.tbl, ...) {
+  grouped <- group_by(.tbl, ...)
+  names <- rlang::eval_bare(rlang::expr(paste(!!!group_keys(grouped), sep = " / ")))
+  
+  grouped %>% 
+    group_split() %>% 
+    rlang::set_names(names)
+}
+
+# Create list of tibbles
+Titr_comp_List <- Titr_comp %>% 
+  named_group_split(Filename)
+```
+
+
+---------- Calculate Total Alkalinity (TA) ---------- 
+```{r}
+# TA_Gran function
+    # Titrant (HCl) normality always NHCl <- 0.01
+    # Weight was exactly 30.00 for every titration 
+    # Pressure was constant at 1013 hPa, needed in dbar for formula. Therefore 10.13253 dbar
+
+TA_Gran <- function(., N = 0.01, Ws = 30.00, pH, Vt, S, Temp) { 
+  
+  options(digits = 5)
+  # swd = seawater density
+  swd <- oce::swRho(salinity = S, temperature = Temp, pressure = 10.13)/1000 # g/cm3 * 1000 = kg/m3
+  # Vs = volume of the sample
+  Vs <- Ws * swd   # weight * density                                     
+  # p <- data.frame(pH = pH, Vt = Vt (Vt = ml)
+  p <- tibble(pH = pH, Vt = Vt)
+  z <- p
+  iii <- which((3.5 <= p$pH) & (p$pH <= 4.5))
+  z <- p[iii,]
+  Vtt <- z$Vt
+  z <- z$pH   
+  F1 <- (Vs + Vtt) * 10^-z
+  f <- lm(Vtt ~ F1)
+  Ve <- coef(f)[1]
+  TA <- Ve * 1000 * N / Vs
+  return(TA)
+  attributes(TA) <- NULL
+  attr(TA, "unit") <- "mmol/L"
+  attr(TA, "name") <- "Total Alkalinity from Gran approximation"
+  
+}
+```
+
+```{r}
+# create a vector with the names of the list-tibble to iterate over
+list_names <- names(Titr_comp_List)
+
+# calculate TA & add it to each tibble as another column
+tab <- map_dfr(.x = list_names,
+               .f = ~ {
+                 Titr_comp_List %>%
+                   pluck(.x) %>%
+                   mutate(TA_mmolL = TA_Gran(pH = pH, Vt = ml, Ws = Ws[1], 
+                                             Temp = mean(Temp), 
+                                             S = S[1])) %>%
+                   dplyr::select(-c(ml:Temp, Ws)) %>%
+                   distinct()
+               }) 
+
+rm(list_names)
+```
+
+```{r}
+# Change TA dataframe to fit with O2 dataframe
+Alk_Data <- tab %>% dplyr::select(c("Filename", "jar", "run", "day", "S", "TA_mmolL"))
+
+#Change to fit with O2 (CAREFULL!! sometimes names are  with "-" and sometimes with "_")
+Alk_Data$fragment_ID <- gsub("-","", tab$assemblages)
+Alk_Data$fragment_ID <- gsub("_","", Alk_Data$fragment_ID)
+Alk_Data$fragment_ID <- gsub("\\|","_", Alk_Data$fragment_ID)
+Alk_Data$fragment_ID <- gsub(" ","", Alk_Data$fragment_ID)
+Alk_Data$day <- gsub("day", "", Alk_Data$day)
+Alk_Data$run <- gsub("run", "", Alk_Data$run)
+Alk_Data$jar <- gsub("jar", "", Alk_Data$jar)
+Alk_Data$TA_mmolL <- as.numeric(Alk_Data$TA_mmolL)
+```
+
+
+---------- save table ----------
+```{r}
+write.csv(Alk_Data, "Data/TA_Results_AllDays.csv")
+```

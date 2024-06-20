@@ -1,0 +1,363 @@
+
+---------- load packages ----------
+```{r, include = FALSE}
+library(tidyverse)
+library(lubridate) # call lubridate extra, otherwise it does not work
+library(ggpubr)
+```
+
+
+---------- load and adjust raw O2 data ----------
+```{r}
+#load data
+O2_Data <- read.csv("Data/Raw/lazy_coral_O2_ALL.csv")
+#str(O2_Data)
+
+# make Data handling easier and make sure O2 and alkalinity data have the same column names
+
+# change separator of fragment_ID so it fits with alkalinity data
+O2_Data$fragment_ID <- gsub("-","",O2_Data$fragment_ID)
+O2_Data$fragment_ID <- gsub("\\|","_",O2_Data$fragment_ID)
+
+# remove white space from some of the fragment_ID names
+O2_Data$fragment_ID <- gsub(" ","",O2_Data$fragment_ID)
+
+# fill empty rows with NA (no missing values)
+O2_Data[O2_Data == ""] <- NA
+sum(is.na(O2_Data))
+
+# Delete one single fragment row where something went wrong during the experiment (Checked in dataentry_notes)
+O2_Data <- O2_Data %>% filter(!(fragment_ID == "PdaD2" & day == "16" & run == "1"))
+```
+
+```{r}
+#change O2_Data categories
+O2_Data$date <- mdy(O2_Data$date)
+
+O2_Data$time_start_L <- hm(O2_Data$time_start_L)
+O2_Data$time_start_D <- hm(O2_Data$time_start_D)
+O2_Data$time_start_L_cont <- hm(O2_Data$time_start_L_cont)
+O2_Data$time_start_D_cont <- hm(O2_Data$time_start_D_cont)
+
+O2_Data$time_end_L <- hm(O2_Data$time_end_L)
+O2_Data$time_end_D <- hm(O2_Data$time_end_D)
+O2_Data$time_end_L_cont <- hm(O2_Data$time_end_L_cont)
+O2_Data$time_end_D_cont <- hm(O2_Data$time_end_D_cont)
+
+O2_Data$run <- as.factor(O2_Data$run)
+O2_Data$day <- as.factor(O2_Data$day)
+O2_Data$salinity <- as.factor(O2_Data$salinity)
+```
+
+```{r}
+#Calculate incubation times
+O2_Data$time_L_min <- time_length(O2_Data$time_end_L- O2_Data$time_start_L, unit = "minutes")
+O2_Data$time_D_min <- time_length(O2_Data$time_end_D- O2_Data$time_start_D, unit = "minutes")
+O2_Data$time_L_min_cont <- time_length(O2_Data$time_end_L_cont- O2_Data$time_start_L_cont, unit = "minutes")
+O2_Data$time_D_min_cont <- time_length(O2_Data$time_end_D_cont- O2_Data$time_start_D_cont, unit = "minutes")
+```
+
+
+---------- first typo and outlier Check ----------
+```{r}
+# check if runs are correct (every run has 9 entries except  day 16, because of two extra incubations) -> is correct
+summary(O2_Data$day)
+O2_Data %>% group_by(day, run)%>% summarise(length(run))
+
+# salinity
+ggplot(O2_Data, aes(x= date, y= salinity, colour = run))+
+      geom_point()+
+      geom_jitter(height = 0)
+
+# get start time of runs 
+O2_Data %>% group_by(run)%>% arrange(desc(time_start_L))%>%  summarise(Earliest_L = last(time_start_L), Latest_L = first(time_start_L))
+
+O2_Data %>% group_by(run)%>% arrange(desc(time_start_D))%>%  summarise(Earliest_D = last(time_start_D), Latest_D = first(time_start_D))
+
+
+# Check for incubation time outliers
+# --------------- Incubations
+ggplot(O2_Data, aes(x= day, y= time_L_min, colour = run))+
+      geom_jitter(height = 0)
+
+ggplot(O2_Data, aes(x= day, y= time_D_min, colour = run))+
+      geom_jitter(height = 0)
+
+
+# ----------------- Controls
+# Day 4 run 2, control time in L rather high but correct (double checked)
+ggplot(O2_Data, aes(x= day, y= time_L_min_cont, colour = run))+
+      geom_jitter(height = 0)
+
+ggplot(O2_Data, aes(x= day, y= time_D_min_cont, colour = run))+
+      geom_jitter(height = 0)
+```
+
+```{r}
+# Check O2 values
+# --------------- Incubations
+ggplot(O2_Data, aes(x= day, y= O2_start_L, colour = run))+
+      geom_jitter(height = 0)
+
+ggplot(O2_Data, aes(x= day, y= O2_start_D, colour = run))+
+      geom_jitter(height = 0)
+
+ggplot(O2_Data, aes(x= day, y= O2_end_L, colour = run))+
+      geom_jitter(height = 0)
+
+ggplot(O2_Data, aes(x= day, y= O2_end_D, colour = run))+
+      geom_jitter(height = 0)
+
+# ----------------- Controls
+ggplot(O2_Data, aes(x= day, y= O2_start_L_cont, colour = run))+
+      geom_jitter(height = 0)
+
+ggplot(O2_Data, aes(x= day, y= O2_start_D_cont, colour = run))+
+      geom_jitter(height = 0)
+
+ggplot(O2_Data, aes(x= day, y= O2_end_L_cont, colour = run))+
+      geom_jitter(height = 0)
+
+ggplot(O2_Data, aes(x= day, y= O2_end_D_cont, colour = run))+
+      geom_jitter(height = 0)
+```
+
+
+---------- O2 production & consumption calculation ----------
+```{r}
+#(O2 mg / h) = (difference O2 concentration [mg/L ] * incubation volumn [L]) / time [h]
+
+# incubations
+O2_Data$base_O2produced_mg_min <- (O2_Data$O2_end_L - O2_Data$O2_start_L)* O2_Data$Vjar_l / O2_Data$time_L_min
+O2_Data$base_O2produced_mg_h <- O2_Data$base_O2produced_mg_min *60
+
+O2_Data$base_respiration_mg_min <- (O2_Data$O2_start_D - O2_Data$O2_end_D)* O2_Data$Vjar_l / O2_Data$time_D_min
+O2_Data$base_respiration_mg_h <- O2_Data$base_respiration_mg_min *60
+
+# controls
+O2_Data$base_O2produced_mg_min_cont <- (O2_Data$O2_end_L_cont - O2_Data$O2_start_L_cont)* O2_Data$Vjar_l / O2_Data$time_L_min_cont
+O2_Data$base_O2produced_mg_h_cont <- O2_Data$base_O2produced_mg_min_cont *60
+
+O2_Data$base_respiration_mg_min_cont <- (O2_Data$O2_start_D_cont - O2_Data$O2_end_D_cont)* O2_Data$Vjar_l / O2_Data$time_D_min_cont
+O2_Data$base_respiration_mg_h_cont <- O2_Data$base_respiration_mg_min_cont *60
+
+# check graphically
+ggplot(O2_Data, aes(x= day, y= base_O2produced_mg_h_cont))+ 
+      geom_point() # Day 1 has minus values, because on day one the controls had a slightly lower O2 value at the end of the light incrustations than at the start and a higher O2 value at the end of the dark incubation then at the beginning of the dark incubations.
+
+ggplot(O2_Data, aes(x= day, y= base_respiration_mg_h_cont))+
+      geom_point() 
+
+```
+
+```{r}
+#normalize with controls
+#Corrected oxygen production Sample = Oxygen production Sample - Oxygen production Control
+# *1000 to come from mg to ug
+O2_Data$net_photo_ug_h <- round((O2_Data$base_O2produced_mg_h - O2_Data$base_O2produced_mg_h_cont)*1000,4)
+O2_Data$respiration_ug_h <- round((O2_Data$base_respiration_mg_h - O2_Data$base_respiration_mg_h_cont)*1000,4)
+O2_Data$gross_photo_ug_h <- round(O2_Data$net_photo_ug_h + O2_Data$respiration_ug_h,4)
+```
+
+```{r}
+#check outliers through O2 start values
+ggplot(O2_Data, aes(x=O2_start_L, y=net_photo_ug_h))+
+  geom_point()
+
+O2_Data <- O2_Data %>% filter(respiration_ug_h > -10) %>% 
+        filter(net_photo_ug_h != 1251.3275) # delete 1 single frag outlier which has strong negative respiration values
+
+# subset only important rows for now
+Data_sub <- O2_Data %>% dplyr::select(date, day, run, fragment_ID, genus, family, jar, salinity, net_photo_ug_h, respiration_ug_h, gross_photo_ug_h, O2_start_L, O2_end_L, O2_start_D, O2_end_D)
+```
+
+
+---------- normalize with surface area of corals ----------
+```{r}
+#load surface area data
+mass_all <- read.csv("Data/Raw/lazy_coral_fragment_surface-volume.csv")
+mass_all$fragment_ID <- gsub("-","",mass_all$fragment_ID)
+str(mass_all)
+
+# check surface values
+ggplot(mass_all, aes(x= species, y= surface_mm2))+
+      geom_point()
+
+
+################ normalize with surface area
+surface <- mass_all %>%  dplyr::select(fragment_ID, surface_mm2)
+volume <- mass_all %>%  dplyr::select(fragment_ID, volume_cm3)
+# get combination
+combi <- Data_sub %>%  dplyr::select(fragment_ID)
+# delete double fragment_IDs
+combi <- distinct(combi, fragment_ID)
+
+#surface
+for(i in 1:nrow(combi)){
+  Target <- strsplit(as.character(combi$fragment_ID[i]),"_")[[1]]
+  combi$sum_surface_mm[i] <- sum(surface[surface$fragment_ID %in% Target, "surface_mm2"])
+}
+# get cm2
+combi$sum_surface_cm2 <- (combi$sum_surface_mm / 100)
+
+# drop sum_surface_mm
+combi <- dplyr::select(combi, -sum_surface_mm)
+
+#volume
+for(i in 1:nrow(combi)){
+  Target <- strsplit(as.character(combi$fragment_ID[i]),"_")[[1]]
+  combi$sum_volume_cm3[i] <- sum(volume[volume$fragment_ID %in% Target, "volume_cm3"])
+}
+
+
+Data_all <- left_join(Data_sub, combi, by = c("fragment_ID" = "fragment_ID")) 
+
+# remove unnecessary objects
+rm(i, Target, combi, Data_sub, surface, volume)
+
+# keep columns with photosynthesis and respiration without surface normalized and add new ones with normalization
+# correct unit is ug O2 cm-2 h-1
+Data_all$net_photo_h_surface <- Data_all$net_photo_ug_h / Data_all$sum_surface_cm2
+Data_all$respiration_h_surface <- Data_all$respiration_ug_h / Data_all$sum_surface_cm2
+Data_all$gross_photo_h_surface <- Data_all$net_photo_h_surface + Data_all$respiration_h_surface
+```
+
+
+---------- add two useful columns: "category" & "species ----------
+```{r}
+# certain incubation types only took place on specific days
+Single <- filter(Data_all, day %in% c("1", "2", "3", "10", "11", "12", "15", "16", "17"))
+Single$category <- "single"
+
+Biomass <- filter(Data_all, day == "4")
+Biomass$category <- "biomass"
+
+Conspe <- filter(Data_all, day %in% c("5", "14"))
+Conspe$category <- "conspecific"
+
+Family <- filter(Data_all, day == "6")
+Family$category <- "family"
+
+Mix <- filter(Data_all, day %in% c("7", "8", "9", "13"))
+Mix$category <- "mix"
+
+Data_O2_com <- rbind(Single, Biomass, Conspe, Family, Mix)
+
+# Get species column
+Data_O2_com$species <- Data_O2_com$fragment_ID %>% gsub("A1", "", .) %>% gsub("A2", "", .) %>% gsub("A3", "",.)%>% gsub("A4", "",.)%>% gsub("B1", "", .) %>% gsub("B2", "", .) %>% gsub("B3", "", .)%>% gsub("B4", "",.)%>% gsub("C1", "", .) %>% gsub("C2", "", .) %>% gsub("C3", "", .) %>% gsub("C4", "",.) %>% gsub("D1", "", .) %>% gsub("D2", "", .) %>% gsub("D3", "", .) %>% gsub("D4", "",.) %>% gsub("E1", "", .) %>% gsub("E2", "", .) %>% gsub("E3", "", .) %>% gsub("E4", "",.) %>% gsub("F1", "", .) %>% gsub("F2", "", .) %>% gsub("F3", "", .) %>% gsub("F4", "",.)
+```
+
+
+---------- Quality control (Further checks in 'Preparation Calcification Rate' script) ----------
+```{r}
+# check for obvious miss measurements in start O2 values
+
+#theme for graphs
+theme <- theme(legend.position = "bottom",
+         legend.text = element_text(size = 15),
+        plot.margin = unit(c(1,0.2,0.2,1), "cm"),
+        axis.text.x = element_text(size = 18, color = "black"),
+        axis.title.x= element_text(size= 18, face ="bold",margin=margin(12,0,0,0)),
+        axis.text.y = element_text(size = 18, vjust = 0.5, color = "black"),
+        axis.title.y =element_text(hjust = 0.5, size=18,face="bold",margin=margin(0,12,0,0)))
+
+# all
+ggplot(Data_O2_com, aes(x = O2_start_L, y = net_photo_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point( size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start values light inc. (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+  ylab(expression(paste("Measured net photosynthesis (μg O "[2]," cm" ^-2," h" ^-1,")")))+
+   theme
+
+ggplot(Data_O2_com, aes(x = O2_start_D, y = respiration_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point( size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start value dark inc. (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+  ylab(expression(paste("Measured respiration (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+    theme
+
+ggplot(Data_O2_com, aes(x = O2_start_D, y = gross_photo_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point( size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start value dark inc. (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+  ylab(expression(paste("Measured gross photosynthesis (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+    theme
+
+ggplot(Data_O2_com, aes(x = O2_start_L, y = gross_photo_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point( size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start value light inc. (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+  ylab(expression(paste("Measured gross photosynthesis (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+   theme
+
+# single
+ggplot(Single, aes(x = O2_start_L, y = net_photo_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point(size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start values light inc. (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+  ylab(expression(paste("Measured net photosynthesis (μg O "[2]," cm" ^-2," h" ^-1,")")))+
+   theme
+
+ggplot(Single, aes(x = O2_start_D, y = respiration_h_surface),color= species) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point(size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start value dark inc. (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+  ylab(expression(paste("Measured respiration (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+    theme
+
+ggplot(Single, aes(x = O2_start_D, y = gross_photo_h_surface),color= species) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point(size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start value dark inc. (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+  ylab(expression(paste("Measured gross photosynthesis (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+    theme
+
+ggplot(Single, aes(x = O2_start_L, y = gross_photo_h_surface),color= species) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point(size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start value light inc. (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+  ylab(expression(paste("Measured gross photosynthesis (μg O "[2]," cm" ^-2," h" ^-1,")"))) +
+    theme
+```
+
+```{r}
+# Based on graphs above, exclude day 17 O2 measurements of run 2 and 3 as something is obviously wrong with the start values which correlate strongly with the end productivity. Without them no correlation exists. -> day 17 are all single fragments
+# correlation of dark values is ok, because more productive species have higher O2 dark value and also likely respire more
+
+day17 <- Data_O2_com%>%  filter(day==17) %>% 
+                    filter(run==1)
+
+Data_min17 <- Data_O2_com %>%  filter(day !=17)
+
+Data_O2_com <- rbind(Data_min17, day17) # Exclude day 17 run 2 and 3 from O2 data
+```
+
+
+---------- Save Table ----------
+```{r}
+write.csv(Data_O2_com, file = "Data/O2_comp.csv")
+```

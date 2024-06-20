@@ -1,0 +1,534 @@
+
+---------- load pckages ----------
+```{r, include = FALSE}
+library(tidyverse)
+library(lubridate) # call lubridate extra, otherwise it does not work
+library(rstatix)
+library(ggpubr)
+```
+
+
+---------- read and adjust data ---------- 
+```{r}
+Data <- read.csv("Data/O2_and_Calc_comp.csv") # do not use read_csv it makes date into an actual date and later code can not handle this
+
+# Get only species column
+Data$species <- Data$fragment_ID %>% gsub("A1", "", .) %>% gsub("A2", "", .) %>% gsub("A3", "",.)%>% gsub("A4", "",.)%>%gsub("B1", "", .) %>% gsub("B2", "", .) %>% gsub("B3", "", .)%>% gsub("B4", "",.)%>% gsub("C1", "", .) %>% gsub("C2", "", .) %>% gsub("C3", "", .) %>% gsub("C4", "",.) %>%gsub("D1", "", .) %>% gsub("D2", "", .) %>% gsub("D3", "", .) %>% gsub("D4", "",.) %>%gsub("E1", "", .) %>% gsub("E2", "", .) %>% gsub("E3", "", .) %>% gsub("E4", "",.) %>%gsub("F1", "", .) %>% gsub("F2", "", .) %>% gsub("F3", "", .) %>% gsub("F4", "",.)
+
+# get colony
+Data$colony <- Data$fragment_ID %>% gsub("[[:digit:]]+", "", .)
+
+# make sure there is no white space between the colony names
+Data$colony <- gsub(" ","",Data$colony)
+
+# change Data category
+Data$run <- as.factor(Data$run)
+Data$day <- as.factor(Data$day)
+
+# set one net value and gross value to NA, because they are outliers
+# outlier got very noticeable in GLMM over all single fragments family comparison, yet looks fine in Calc
+Data<- Data %>%  mutate(net_photo_h_surface=ifelse(fragment_ID=="PdaA2" & day == "2", NA, net_photo_h_surface),
+gross_photo_h_surface=ifelse(fragment_ID=="PdaA2" & day == "2", NA, gross_photo_h_surface))  
+
+# set two calc values to NA, because they are outliers
+# outliers got very noticeable in GLMM over all single fragments family comparison, yet looks fine in O2 data
+Data<- Data %>%  mutate(calc_umol_cm2_h=ifelse(fragment_ID=="PloD1" & day == "10", NA, calc_umol_cm2_h),
+Calc_umol_h=ifelse(fragment_ID=="PloD1" & day == "10", NA, Calc_umol_h))  
+
+Data<- Data %>%  mutate(calc_umol_cm2_h=ifelse(fragment_ID=="PruD1" & day == "17", NA, calc_umol_cm2_h),
+Calc_umol_h=ifelse(fragment_ID=="PruD1" & day == "17", NA, Calc_umol_h))  
+
+# get all Single fragment incubations
+Single <- filter(Data, category == "single")
+Single$date <- ymd(Single$date)
+
+# split up in species
+Acy <- Single %>%  filter(species == "Acy")
+Amu <- Single %>%  filter(species == "Amu")
+Mdi <- Single %>%  filter(species == "Mdi")
+Pcy <- Single %>%  filter(species == "Pcy")
+Pda <- Single %>%  filter(species == "Pda")
+Plo <- Single %>%  filter(species == "Plo")
+Pru <- Single %>%  filter(species == "Pru")
+Pve <- Single %>%  filter(species == "Pve")
+Spi<- Single %>%  filter(species == "Spi")
+```
+
+
+---------- Calculate expected value ----------
+Decision after looking at the data:
+To get the expected value we use a line through the same colony, separated by run (normalized to surface).
+```{r}
+# Create FUNCTIONS to get net photosynthesis, respiration, gross photosynthesis and calcification per colony and run
+# Where single frag are excluded as outliers we need data to calculate expected value. Therefore we use rule = 2 in approx function, whereby the value at the closest data extreme is used.
+
+#--------------------------- Net Photosynthesis FUNCTION
+
+Interpolate_netphoto <- function(Data, Sp_dataframe, Sp_row, COL){
+ # get Experiment dates and calculate photosynthesis & respiration per day
+  Data_sub <- Data %>% dplyr::select(date, colony, species)
+  
+  # get only rows where e.g. Mdi is included (single and mix) and use only the dates 
+  Data_col <- subset(Data_sub, grepl(Sp_row, Data_sub$colony))
+  Data_col_date <- unique(Data_col$date)
+  
+  # Create list of colony and cross all colonies with a date
+  colony <- as.factor(c(COL))
+  col_O2 <- cross_df(list(date = Data_col_date, colony = colony)) #cross_df cannot handle dates, therefore use character here
+  col_O2$date <- ymd(col_O2$date)
+  
+  rm(Data_sub, Data_col, Data_col_date)
+  
+   # delete NAs in dataframe
+  # lmList does not work if there are NA in used rows, delte them
+  col_fin <- Sp_dataframe %>%  drop_na(net_photo_h_surface)
+  
+  # separate into runs and one colony
+   # interpolate points per day
+  col_group <-col_fin %>%
+              group_by(run, colony) %>% 
+              summarize(Net_photo = approx(date, net_photo_h_surface, xout= col_O2$date, rule=2, method = "linear")$y,
+                        date = col_O2$date) %>% 
+              ungroup()
+  
+  return(col_group)
+}
+   
+#--------------------------- Gross Photosynthesis FUNCTION
+Interpolate_grossphoto <- function(Data, Sp_dataframe, Sp_row, COL){
+ # get Experiment dates and calculate photosynthesis & respiration per day
+  Data_sub <- Data %>% dplyr::select(date, colony, species)
+  
+  # get only rows where e.g. Mdi is included (single and mix) and use only the dates 
+  Data_col <- subset(Data_sub, grepl(Sp_row, Data_sub$colony))
+  Data_col_date <- unique(Data_col$date)
+  
+  # Create list of colony and cross all colonies with a date
+  colony <- as.factor(c(COL))
+  col_O2 <- cross_df(list(date = Data_col_date, colony = colony)) #cross_df cannot handle dates, therefore use character here
+  col_O2$date <- ymd(col_O2$date)
+  
+  rm(Data_sub, Data_col, Data_col_date)
+  
+  # delete NAs in dataframe
+  # lmList does not work if there are NA in used rows, delte them
+  col_fin <- Sp_dataframe %>%  drop_na(gross_photo_h_surface)
+  
+  # separate into runs and one colony
+   # interpolate points per day
+  col_group <-col_fin %>%
+              group_by(run, colony) %>% 
+              summarize(Gross_photo = approx(date, gross_photo_h_surface, xout= col_O2$date,rule=2, method = "linear")$y,
+                        date = col_O2$date) %>% 
+              ungroup()
+  
+  return(col_group)
+}
+
+#--------------------------- Respiration FUNCTION
+Interpolate_resp <- function(Data, Sp_dataframe, Sp_row, COL){
+ # get Experiment dates and calculate photosynthesis & respiration per day
+  Data_sub <- Data %>% dplyr::select(date, colony, species)
+  
+  # get only rows where e.g. Mdi is included (single and mix) and use only the dates 
+  Data_col <- subset(Data_sub, grepl(Sp_row, Data_sub$colony))
+  Data_col_date <- unique(Data_col$date)
+  
+  # Create list of colony and cross all colonies with a date
+  colony <- as.factor(c(COL))
+  col_O2 <- cross_df(list(date = Data_col_date, colony = colony)) #cross_df cannot handle dates, therefore use character here
+  col_O2$date <- ymd(col_O2$date)
+  
+  rm(Data_sub, Data_col, Data_col_date)
+  
+   # delete NAs in dataframe
+  # lmList does not work if there are NA in used rows, delte them
+  col_fin <- Sp_dataframe %>%  drop_na(respiration_h_surface)
+  
+  # separate into runs and one colony
+   # interpolate points per day
+  col_group <-col_fin %>%
+              group_by(run, colony) %>% 
+              summarize(Resp = approx(date, respiration_h_surface, xout= col_O2$date,rule=2, method = "linear")$y,
+                        date = col_O2$date) %>% 
+              ungroup()
+  
+  return(col_group)
+}
+
+#--------------------------- Calcification FUNCTION
+Interpolate_calci <- function(Data, Sp_dataframe, Sp_row, COL){
+ # get Experiment dates and calculate photosynthesis & respiration per day
+  Data_sub <- Data %>% dplyr::select(date, colony, species)
+  
+  # get only rows where e.g. Mdi is included (single and mix) and use only the dates 
+  Data_col <- subset(Data_sub, grepl(Sp_row, Data_sub$colony))
+  Data_col_date <- unique(Data_col$date)
+  
+  # Create list of colony and cross all colonies with a date
+  colony <- as.factor(c(COL))
+  col_O2 <- cross_df(list(date = Data_col_date, colony = colony)) #cross_df cannot handle dates, therefore use character here
+  col_O2$date <- ymd(col_O2$date)
+  
+  rm(Data_sub, Data_col, Data_col_date)
+  
+   # delete NAs in dataframe
+  # lmList does not work if there are NA in used rows, delte them
+  col_fin <- Sp_dataframe %>%  drop_na(calc_umol_cm2_h)
+  
+  # separate into runs and one colony
+   # interpolate points per day
+  col_group <-col_fin %>%
+              group_by(run, colony) %>% 
+              summarize(Calci = approx(date, calc_umol_cm2_h, xout= col_O2$date,rule=2, method = "linear")$y,
+                        date = col_O2$date) %>% 
+              ungroup()
+  
+  return(col_group)
+}
+```
+
+```{r include=FALSE}
+# Use function to get the interpolated variables
+
+#delete unnecessary NA rows for calc
+Data_calc <- Data %>% drop_na(calc_umol_cm2_h)
+
+#delete unnecessary NA rows for O2
+Data <- Data %>% drop_na(net_photo_h_surface)
+
+#Acy
+COL <- as.factor(c("AcyA", "AcyB", "AcyD"))
+Acy_net <- Interpolate_netphoto(Data, Acy, "Acy", COL)
+Acy_gross <- Interpolate_grossphoto(Data, Acy, "Acy", COL)
+Acy_resp <- Interpolate_resp(Data, Acy, "Acy", COL)
+Acy_calc <- Interpolate_calci(Data_calc, Acy, "Acy", COL)
+
+#Amu
+COL <- as.factor(c("AmuA", "AmuB", "AmuD"))
+Amu_net <- Interpolate_netphoto(Data, Amu, "Amu", COL)
+Amu_gross <- Interpolate_grossphoto(Data, Amu, "Amu", COL)
+Amu_resp <- Interpolate_resp(Data, Amu, "Amu", COL)
+Amu_calc <- Interpolate_calci(Data_calc, Amu, "Amu", COL)
+
+# Mdi
+COL <- as.factor(c("MdiA", "MdiC", "MdiD"))
+Mdi_net <- Interpolate_netphoto(Data, Mdi, "Mdi", COL)
+Mdi_gross <- Interpolate_grossphoto(Data, Mdi, "Mdi", COL)
+Mdi_resp <- Interpolate_resp(Data, Mdi, "Mdi", COL)
+Mdi_calc <- Interpolate_calci(Data_calc, Mdi, "Mdi", COL)
+
+#Pcy
+COL <- as.factor(c("PcyA", "PcyB", "PcyC"))
+Pcy_net <- Interpolate_netphoto(Data, Pcy, "Pcy", COL)
+Pcy_gross <- Interpolate_grossphoto(Data, Pcy, "Pcy", COL)
+Pcy_resp <- Interpolate_resp(Data, Pcy, "Pcy", COL)
+Pcy_calc <- Interpolate_calci(Data_calc, Pcy, "Pcy", COL)
+
+#Pda
+COL <- as.factor(c("PdaA", "PdaB", "PdaD"))
+Pda_net <- Interpolate_netphoto(Data, Pda, "Pda", COL)
+Pda_gross <- Interpolate_grossphoto(Data, Pda, "Pda", COL)
+Pda_resp <- Interpolate_resp(Data, Pda, "Pda", COL)
+Pda_calc <- Interpolate_calci(Data_calc, Pda, "Pda", COL)
+
+#Plo
+COL <- as.factor(c("PloB", "PloC", "PloD"))
+Plo_net <- Interpolate_netphoto(Data, Plo, "Plo", COL)
+Plo_gross <- Interpolate_grossphoto(Data, Plo, "Plo", COL)
+Plo_resp <- Interpolate_resp(Data, Plo, "Plo", COL)
+Plo_calc <- Interpolate_calci(Data_calc, Plo, "Plo", COL)
+
+#Pru
+COL <- as.factor(c("PruA", "PruD", "PruE"))
+Pru_net <- Interpolate_netphoto(Data, Pru, "Pru", COL)
+Pru_gross <- Interpolate_grossphoto(Data, Pru, "Pru", COL)
+Pru_resp <- Interpolate_resp(Data, Pru, "Pru", COL)
+Pru_calc <- Interpolate_calci(Data_calc, Pru, "Pru", COL)
+
+#Pve
+COL <- as.factor(c("PveA", "PveB", "PveF"))
+Pve_net <- Interpolate_netphoto(Data, Pve, "Pve", COL)
+Pve_gross <- Interpolate_grossphoto(Data, Pve, "Pve", COL)
+Pve_resp <- Interpolate_resp(Data, Pve, "Pve", COL)
+Pve_calc <- Interpolate_calci(Data_calc, Pve, "Pve", COL)
+
+#Spi
+COL <- as.factor(c("SpiA", "SpiB", "SpiD"))
+Spi_net <- Interpolate_netphoto(Data, Spi, "Spi", COL)
+Spi_gross <- Interpolate_grossphoto(Data, Spi, "Spi", COL)
+Spi_resp <- Interpolate_resp(Data, Spi, "Spi", COL)
+Spi_calc <- Interpolate_calci(Data_calc, Spi, "Spi", COL)
+
+
+# combine all
+Net_all <- rbind(Acy_net, Amu_net, Mdi_net, Pcy_net, Pda_net, Plo_net, Pru_net, Pve_net, Spi_net)
+Gross_all <- rbind(Acy_gross, Amu_gross, Mdi_gross, Pcy_gross, Pda_gross, Plo_gross, Pru_gross, Pve_gross, Spi_gross)
+Resp_all <- rbind(Acy_resp, Amu_resp, Mdi_resp, Pcy_resp, Pda_resp, Plo_resp, Pru_resp, Pve_resp, Spi_resp)
+Calc_all <- rbind(Acy_calc, Amu_calc, Mdi_calc, Pcy_calc, Pda_calc, Plo_calc, Pru_calc, Pve_calc, Spi_calc)
+```
+
+```{r}
+# check if values are correct
+   ggplot(Mdi_net, aes(x=date, y=Net_photo, color=colony, shape=run))+
+    geom_point()+
+    geom_line()
+
+  ggplot(Mdi, aes(x=date, y=net_photo_h_surface, color=colony, shape=run))+
+    geom_point()+
+    geom_line()
+  
+    ggplot(Mdi, aes(x=date, y=net_photo_h_surface, color=fragment_ID))+
+    geom_point()+
+    geom_line()
+
+  ggplot(Acy_calc, aes(x=date, y=Calci, color=colony, shape=run))+
+    geom_point()+
+    geom_line()
+  
+    ggplot(Amu_calc, aes(x=date, y=Calci, color=colony, shape=run))+
+    geom_point()+
+    geom_line()
+    
+       ggplot(Plo_calc, aes(x=date, y=Calci, color=colony, shape=run))+
+    geom_point()+
+    geom_line()
+       
+            ggplot(Pru_calc, aes(x=date, y=Calci, color=colony, shape=run))+
+    geom_point()+
+    geom_line()
+  
+    ggplot(Pru_resp, aes(x=date, y=Resp, color=colony, shape=run))+
+    geom_point()+
+    geom_line()
+  
+```
+
+
+---------- Supplementary Figure S1: Example of productivity value interpolation between monocultures ----------
+```{r}
+Acy_gg <- 
+  ggplot(Acy, aes(x=date, y=net_photo_h_surface, color=colony, shape=run))+
+    geom_point(size=3)+
+    geom_line(data=Acy[!is.na(Acy$net_photo_h_surface),])+
+  ylab(expression(paste("Net photosynthesis (μg O"[2]," cm" ^-2," h" ^-1,")"))) +
+  scale_color_manual(name="colony", values= c("#1E88E5","#004D13", "#FF7307"),labels= c("AcyA"="A", "AcyB"="B", "AcyD"="C"))+
+  ggtitle("Measured Values")+
+  theme_classic() +
+   theme(legend.position = "none",
+        plot.margin = unit(c(1,0.2,0.2,1), "cm"),
+        plot.title = element_text(hjust = 0.5),
+        legend.text = element_text(size = 13),
+         legend.title = element_text(size=13),
+         legend.key.size = unit(15,"point"),
+        axis.text.x = element_text(size = 13, color = "black", angle = 45, hjust= 1),
+        axis.title.x=element_blank(),
+        axis.text.y = element_text(size = 18, vjust = 0.5, color = "black"),
+        axis.title.y =element_text(hjust = 0.5, size=18,face="bold",margin=margin(0,12,0,0)))
+
+Acy2_gg <- 
+  ggplot(Acy_net, aes(x=date, y=Net_photo, color=colony, shape=run))+
+    geom_point(size=3)+
+    geom_line()+
+  ylab(expression(paste("Net photosynthesis (μg O"[2]," cm" ^-2," h" ^-1,")"))) +
+   scale_color_manual(name="colony", values= c("#1E88E5","#004D13", "#FF7307"),labels= c("AcyA"="A", "AcyB"="B", "AcyD"="C"))+
+  ggtitle("Interpolated Values")+
+  theme_classic() +
+   theme(legend.position = "bottom",
+        plot.margin = unit(c(1,0.2,0.2,1), "cm"),
+        plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(size = 13, color = "black", angle = 45, hjust= 1),
+        axis.title.x=element_blank(),
+        axis.text.y = element_text(size = 18, vjust = 0.5, color = "black"),
+        axis.title.y =element_text(hjust = 0.5, size=18,face="bold",margin=margin(0,12,0,0)))
+
+#arrange all plots together
+arranged_Acy <- ggarrange( Acy_gg, Acy2_gg,
+          labels = c("a)", "b)"),
+          label.x = 0,
+          label.y = 0.95,
+          common.legend = TRUE,
+          legend = "bottom",
+          ncol = 2, nrow =1, 
+          hjust = -0.5,
+          vjust = 0) +
+          theme(legend.text = element_text(size = 40))
+
+ggsave("Graphs/M&M_expected.png", width=9, height= 5, limitsize=FALSE, dpi= 700, arranged_Acy)
+```
+
+
+---------- normalize to total surface area present in the incubations ----------
+```{r}
+# read in data to get surface area per fragment
+mass_all <- read.csv("Data/Raw/lazy_coral_fragment_surface-volume.csv")
+mass_all$fragment_ID <- gsub("-","",mass_all$fragment_ID)
+# get cm2
+mass_all$surface_cm2 <- (mass_all$surface_mm2 / 100)
+surface <- mass_all %>%  dplyr::select(fragment_ID, surface_cm2)
+# get colony
+surface$colony <- surface$fragment_ID %>% gsub("[[:digit:]]+", "", .)
+
+rm(mass_all)
+```
+
+```{r include = FALSE}
+# Get expected values per combination of fragments per day and run
+
+#----------------- NET PHOTOSYNTHESIS
+# drop duplicate rows
+Net_all <- distinct(Net_all)
+
+# get combination and date from the experiment
+combi <- Data %>% dplyr::select(date, run, fragment_ID) %>%  mutate(date = ymd(date))
+#create frag_real to keep polyculture fragment_id order in the next steps as well
+combi$frag_real <- combi$fragment_ID
+
+# get Net photo sum per combination
+combi_long <- combi %>% mutate(id=row_number()) %>% separate_rows(fragment_ID, sep="_") %>% mutate(colony = gsub("[[:digit:]]+", "", fragment_ID))
+
+combi_long_Net <- combi_long %>% merge(Net_all, by=c("date", "run", "colony"))
+
+#include surface
+combi_long_Net_surf <- combi_long_Net %>%  left_join(surface, by= c("fragment_ID", "colony"))
+combi_long_Net_surf$Net_persurface <- combi_long_Net_surf$Net_photo*combi_long_Net_surf$surface_cm2
+
+# sum up per polyculture
+combi_Net <- combi_long_Net_surf %>% group_by(id, date, run) %>% summarise(
+  fragment_ID = paste(fragment_ID, collapse="_"), # fragment_ID is reassembled in alphabetical order,
+                                        # which does not match with the colony order used during the experiment.
+                                        # Therefore we use in addition frag_real  
+  exp_Net_photo_ug_h = sum(Net_persurface),
+   frag_real = paste(frag_real))  %>% 
+    ungroup()
+
+Net_final <- distinct(combi_Net) # delete duplicate rows, created by fragment_id being used three times per combination
+
+# drop id and fragment_id row and change frag_real back to fragment_id
+Net_final<-  Net_final %>% dplyr::select(-c("id", "fragment_ID")) %>% rename(fragment_ID = frag_real)
+
+rm(combi_long, combi_long_Net, combi_Net)
+
+
+#----------------- GROSS PHOTOSYNTHESIS
+# drop duplicate rows
+Gross_all <- distinct(Gross_all)
+
+# get Gross photo sum per combination
+combi_long <- combi %>% mutate(id=row_number()) %>% separate_rows(fragment_ID, sep="_") %>% mutate(colony = gsub("[[:digit:]]+", "", fragment_ID))
+
+combi_long_Gross <- combi_long %>% merge(Gross_all, by=c("date", "run", "colony"))
+
+#include surface
+combi_long_Gross_surf <- combi_long_Gross %>%  left_join(surface, by= c("fragment_ID", "colony"))
+combi_long_Gross_surf$Gross_persurface <- combi_long_Gross_surf$Gross_photo*combi_long_Gross_surf$surface_cm2
+
+# sum up per polyculture
+combi_Gross <- combi_long_Gross_surf %>% group_by(id, date, run) %>% summarise(
+  fragment_ID = paste(fragment_ID, collapse="_"), # fragment_ID is reassembled in alphabetical order,
+                                        # which does not match with the colony order used during the experiment.
+                                        # Therefore we use in addition frag_real  
+  exp_Gross_photo_ug_h = sum(Gross_persurface),
+   frag_real = paste(frag_real))  %>% 
+    ungroup()
+
+Gross_final <- distinct(combi_Gross) # delete duplicate rows, created by fragment_id being used three times per combination
+
+# drop id and fragment_id row and change frag_real back to fragment_id
+Gross_final<-  Gross_final %>% dplyr::select(-c("id", "fragment_ID")) %>% rename(fragment_ID = frag_real)
+
+rm(combi_long, combi_long_Gross, combi_Gross)
+
+
+#----------------- RESPIRATION
+# drop duplicate rows
+Resp_all <- distinct(Resp_all)
+
+# get Respiration sum per combination
+combi_long <- combi %>% mutate(id=row_number()) %>% separate_rows(fragment_ID, sep="_") %>% mutate(colony = gsub("[[:digit:]]+", "", fragment_ID))
+
+combi_long_Resp <- combi_long %>% merge(Resp_all, by=c("date", "run", "colony"))
+
+#include surface
+combi_long_Resp_surf <- combi_long_Resp %>%  left_join(surface, by= c("fragment_ID", "colony"))
+combi_long_Resp_surf$Resp_persurface <- combi_long_Resp_surf$Resp*combi_long_Resp_surf$surface_cm2
+
+# sum up per polyculture
+combi_Resp <- combi_long_Resp_surf %>% group_by(id, date, run) %>% summarise(
+  fragment_ID = paste(fragment_ID, collapse="_"), # fragment_ID is reassembled in alphabetical order,
+                                        # which does not match with the colony order used during the experiment.
+                                        # Therefore we use in addition frag_real  
+  exp_Resp_ug_h = sum(Resp_persurface),
+   frag_real = paste(frag_real))  %>% 
+    ungroup()
+
+Resp_final <- distinct(combi_Resp) # delete duplicate rows, created by fragment_id being used three times per combination
+
+# drop id and fragment_id row and change frag_real back to fragment_id
+Resp_final<-  Resp_final %>% dplyr::select(-c("id", "fragment_ID")) %>% rename(fragment_ID = frag_real)
+
+rm(combi_long, combi_long_Resp, combi_Resp)
+
+
+#----------------- CALCIFICATION
+# drop duplicate rows
+Calc_all <- distinct(Calc_all)
+
+# get combination and date from the experiment
+combi <- Data_calc %>% dplyr::select(date, run, fragment_ID) %>%  mutate(date = ymd(date))
+
+#create frag_real to keep polyculture fragment_id order in the next steps as well
+combi$frag_real <- combi$fragment_ID
+
+# get Calcification sum per combination
+combi_long <- combi %>% mutate(id=row_number()) %>% separate_rows(fragment_ID, sep="_") %>% mutate(colony = gsub("[[:digit:]]+", "", fragment_ID))
+
+combi_long_Calc <- combi_long %>% merge(Calc_all, by=c("date", "run", "colony"))
+
+#include surface
+combi_long_Calc_surf <- combi_long_Calc %>%  left_join(surface, by= c("fragment_ID", "colony"))
+combi_long_Calc_surf$Calc_persurface <- combi_long_Calc_surf$Calci*combi_long_Calc_surf$surface_cm2
+
+# sum up per polyculture
+combi_Calc <- combi_long_Calc_surf %>% group_by(id, date, run) %>% summarise(
+  fragment_ID = paste(fragment_ID, collapse="_"), # fragment_ID is reassembled in alphabetical order,
+                                        # which does not match with the colony order used during the experiment.
+                                        # Therefore we use in addition frag_real  
+  exp_Calc_umol_h = sum(Calc_persurface),
+   frag_real = paste(frag_real))  %>% 
+    ungroup()
+
+Calc_final <- distinct(combi_Calc) # delete duplicate rows, created by fragment_id being used three times per combination
+
+# drop id and fragment_id row and change frag_real back to fragment_id
+Calc_final<-  Calc_final %>% dplyr::select(-c("id", "fragment_ID")) %>% rename(fragment_ID = frag_real)
+
+rm(combi_long, combi_long_Calc, combi_Calc)
+
+
+#--------combine all
+Data$date <- ymd(Data$date)
+Net_final$date <- ymd(Net_final$date)
+
+O2_exp <- list(Data, Net_final, Gross_final, Resp_final) %>% purrr::reduce(full_join, by = c("date", "run", "fragment_ID"))
+
+Data_calc$date <- as_date(Data_calc$date)
+Calc_exp <- full_join(Data_calc, Calc_final)
+
+All_exp <- full_join(O2_exp, Calc_exp)
+```
+
+```{r}
+# Get expected value per 1cm^2
+All_exp <- All_exp %>%
+          mutate(exp_Net_photo_ug_h_cm2 = exp_Net_photo_ug_h/sum_surface_cm2) %>% 
+          mutate(exp_Gross_photo_ug_h_cm2 = exp_Gross_photo_ug_h/sum_surface_cm2) %>%
+          mutate(exp_Resp_ug_h_cm2 = exp_Resp_ug_h/sum_surface_cm2) %>%
+          mutate(exp_Calc_umol_h_cm2 = exp_Calc_umol_h/sum_surface_cm2)
+```
+
+
+---------- save table ----------
+```{r}
+write.csv(All_exp, file = "Data/All_expectedvalues.csv")
+```

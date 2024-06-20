@@ -1,0 +1,1179 @@
+
+---------- load packages ----------
+```{r include=FALSE}
+library(tidyverse)
+library(nlme)
+library(rstatix)
+library(ggpubr)
+library(ggtext)
+library(ggrepel)
+library(patchwork)
+```
+
+---------- load data, split in O2 data and calcification data & exclude outliers after visual inspection of obs-expected percentages ----------
+```{r}
+#outlier exlusion in conspecific incubations (family and biomass incubations no outliers detected)
+
+#O2 meausrements
+Data <- read.csv("Data/All_expectedvalues.csv")
+
+Day14 <- Data %>% filter(day =="14")
+Day14<- Day14 %>%
+  filter(fragment_ID != "AmuD1_AmuB2_AmuA3" & fragment_ID != "SpiA4_SpiB1_SpiD2")
+
+Day5 <- Data %>% filter(day =="5")
+Day5<- Day5 %>%
+  filter(fragment_ID != "PloB3_PloC3_PloD3")
+
+Data_sub <- Data %>% filter(day != "14" & day != "5")
+
+Data <- rbind(Day14, Day5, Data_sub)
+
+# calcification measurements
+# important to delete minus values in expected calc, otherwise relative difference in percentage is wrong
+Data_calc <- read.csv("Data/All_expectedvalues.csv")
+
+Day14_calc <- Data_calc %>% filter(day =="14")
+Day14_calc<- Day14_calc %>%
+  filter(fragment_ID != "AmuD2_AmuB4_AmuA1" & fragment_ID != "AmuD1_AmuB2_AmuA3" & fragment_ID != "AcyB1_AcyD2_AcyA3" & fragment_ID != "PruD4_PruE2_PruA3" & fragment_ID != "PdaA1_PdaB2_PdaD4" & fragment_ID != "AcyB3_AcyD3_AcyA1")
+
+Day5 <- Data %>% filter(day =="5")
+Day5_calc<- Day5 %>%
+  filter(fragment_ID != "AcyB1_AcyD1_AcyA1")
+
+Day6_calc <- Data_calc %>%  filter(day == "6")
+Day6_calc <- Day6_calc %>%  filter(fragment_ID != "PloB3_PcyB4_PruD4")
+
+Data_sub_calc <- Data %>% filter(day != "14" & day != "5"& day != "6")
+
+Data_calc <- rbind(Day6_calc, Day14_calc, Day5_calc, Data_sub_calc)
+
+rm(Data_sub, Data_sub_calc)
+```
+
+```{r}
+#outlier exclusion in diversity incubations (family and biomass incubations no outliers detected
+
+#O2 measurements
+Day13 <- Data %>% filter(day =="13")
+Day13<- Day13 %>% filter(fragment_ID != "SpiB2_AcyD2_PcyC3" )
+
+Day9 <- Data %>% filter(day =="9")
+Day9<- Day9 %>% filter(fragment_ID != "PdaA2_AmuD2_PruD3" & fragment_ID != "PveF1_MdiC1_PcyB1")
+
+Day7 <- Data %>% filter(day =="7")
+Day7<- Day7 %>% filter(fragment_ID != "PdaB4_AcyD3_PcyC4")
+
+Data_sub <- Data %>% filter(day != "13" & day != "9" & day != "7")
+
+Data <- rbind(Day13, Day9, Day7, Data_sub)
+
+# calcification measurements
+Day7_calc <- Data_calc %>% filter(day =="7")
+Day7_calc<- Day7_calc %>%filter(fragment_ID != "PdaD1_AcyA1_PcyA1")
+
+Day13_calc <- Data_calc %>% filter(day =="13")
+Day13_calc<- Day13_calc %>%filter(fragment_ID != "PdaD1_AmuA1_PloD1")
+
+Data_sub_calc <- Data_calc %>%  filter(day != "7" & day != "13")
+
+Data_calc <- rbind(Day7_calc, Day13_calc, Data_sub_calc)
+```
+
+
+
+---------- calculate difference between observed/measured and expected values and normalize to % ----------
+This is percentage error, which is the difference between an experimental and theoretical value, divided by the theoretical value, multiplied by 100 to give a percent.
+```{r}
+#((100/ exp)* net_obs) -100, rewritten it is ((net_obs/exp)*100)-100, is the same as ((net_obs/exp)-1)*100, is the same as ((net_obs-exp)/exp)*100 as exp cut out(rauskürzen)
+
+Data$exp_obs_net_photo <- with(Data, Data$net_photo_h_surface - Data$exp_Net_photo_ug_h_cm2)
+Data$exp_obs_net_photo_perc <- with(Data, ((100 / Data$exp_Net_photo_ug_h_cm2) * Data$net_photo_h_surface)-100)
+Data$exp_obs_net_photo_perc <- round(Data$exp_obs_net_photo_perc, 6)
+
+Data$exp_obs_gross_photo <- with(Data, Data$gross_photo_h_surface - Data$exp_Gross_photo_ug_h_cm2)
+Data$exp_obs_gross_photo_perc <- with(Data, ((100 / Data$exp_Gross_photo_ug_h_cm2) * Data$gross_photo_h_surface)-100)
+Data$exp_obs_gross_photo_perc <- round(Data$exp_obs_gross_photo_perc, 6)
+
+Data$exp_obs_respiration <- with(Data, Data$respiration_h_surface - Data$exp_Resp_ug_h_cm2)
+Data$exp_obs_respiration_perc <- with(Data, ((100 / Data$exp_Resp_ug_h_cm2) * Data$respiration_h_surface)-100)
+Data$exp_obs_respiration_perc <- round(Data$exp_obs_respiration_perc, 6)
+
+Data_calc$exp_obs_calc <- with(Data_calc, Data_calc$calc_umol_cm2_h - Data_calc$exp_Calc_umol_h_cm2)
+Data_calc$exp_obs_calc_perc <- with(Data_calc, ((100 / Data_calc$exp_Calc_umol_h_cm2) * Data_calc$calc_umol_cm2_h)-100)
+Data_calc$exp_obs_calc_perc <- round(Data_calc$exp_obs_calc_perc, 6)
+```
+
+
+---------- prepare dataframe for statistic ----------
+```{r}
+#Get dataframe melted and split into conspecific, family and diversity (mixed) dataframes
+
+# Net photo
+Net_m <- Data %>%  dplyr::select("category", "colony", "net_photo_h_surface", "species", "family") %>%
+        mutate(Label = as.factor("Net Photo")) %>%
+        rename(Netphoto = net_photo_h_surface)
+
+ExpNet_m <- Data %>%  dplyr::select("category", "colony", "exp_Net_photo_ug_h_cm2", "species", "family") %>%
+        mutate(Label = as.factor("ExpNet Photo")) %>%
+        rename(Netphoto =exp_Net_photo_ug_h_cm2)
+
+Net_melt <- rbind(Net_m, ExpNet_m)
+
+Net_con <- Net_melt %>%  filter(category == "conspecific")
+Net_fam <- Net_melt %>%  filter(category == "family")
+Net_div <- Net_melt %>%  filter(category == "mix")
+
+rm(Net_m, ExpNet_m)
+
+# Gross photo
+Gross_m <- Data %>%  dplyr::select("category", "colony", "gross_photo_h_surface", "species", "family") %>%
+        mutate(Label = as.factor("Gross Photo")) %>%
+        rename(Grossphoto = gross_photo_h_surface)
+
+ExpGross_m <- Data %>%  dplyr::select("category", "colony", "exp_Gross_photo_ug_h_cm2", "species", "family") %>%
+        mutate(Label = as.factor("ExpGross Photo")) %>%
+        rename(Grossphoto =exp_Gross_photo_ug_h_cm2)
+
+Gross_melt <- rbind(Gross_m, ExpGross_m)
+
+Gross_con <- Gross_melt %>%  filter(category == "conspecific")
+Gross_fam <- Gross_melt %>%  filter(category == "family")
+Gross_div <- Gross_melt %>%  filter(category == "mix")
+
+rm(Gross_m, ExpGross_m)
+
+# Respiration
+Resp_m <- Data %>%  dplyr::select("category", "colony", "respiration_h_surface", "species", "family") %>%
+        mutate(Label = as.factor("Resp")) %>%
+        rename(Resp = respiration_h_surface)
+
+ExpResp_m <- Data %>%  dplyr::select("category", "colony", "exp_Resp_ug_h_cm2", "species", "family") %>%
+        mutate(Label = as.factor("ExpResp")) %>%
+        rename(Resp =exp_Resp_ug_h_cm2)
+
+Resp_melt <- rbind(Resp_m, ExpResp_m)
+
+Resp_con <- Resp_melt %>%  filter(category == "conspecific")
+Resp_fam <- Resp_melt %>%  filter(category == "family")
+Resp_div <- Resp_melt %>%  filter(category == "mix")
+
+rm(Resp_m,ExpResp_m)
+
+# Calcification
+Calc_m <- Data_calc %>%  dplyr::select("category", "colony", "calc_umol_cm2_h", "species", "family") %>%
+        mutate(Label = as.factor("Calc")) %>%
+        rename(Calc = calc_umol_cm2_h)
+
+ExpCalc_m <- Data_calc %>%  dplyr::select("category", "colony", "exp_Calc_umol_h_cm2", "species", "family") %>%
+        mutate(Label = as.factor("ExpCalc")) %>%
+        rename(Calc =exp_Calc_umol_h_cm2)
+
+Calc_melt <- rbind(Calc_m, ExpCalc_m)
+
+Calc_con <- Calc_melt %>%  filter(category == "conspecific")
+Calc_fam <- Calc_melt %>%  filter(category == "family")
+Calc_div <- Calc_melt %>%  filter(category == "mix")
+
+rm(Calc_m, ExpCalc_m)
+```
+
+
+---------- paired t-test between observed/measured and expected values in conspecific, family and diversity incubations ----------
+```{r}
+# check requirements for paired t-test
+
+# Preconditions check normality of differences in paired t test.
+# Homogeneity of variance is not important for paired t test 
+# Does the differences of the pairs follow a normal distribution? P >0.05
+
+# Net -> assumptions are met
+dif_net_con <- with(Net_con, Netphoto[Label == "Net Photo"] - Netphoto[Label == "ExpNet Photo"])
+dif_net_fam <- with(Net_fam, Netphoto[Label == "Net Photo"] - Netphoto[Label == "ExpNet Photo"])
+dif_net_div <- with(Net_div, Netphoto[Label == "Net Photo"] - Netphoto[Label == "ExpNet Photo"])
+
+shapiro.test(dif_net_con) # test = normal
+hist(dif_net_con,xlab='Differences') # check graphically
+qqnorm(dif_net_con) 
+qqline(dif_net_con)
+
+shapiro.test(dif_net_fam) # test = normal
+hist(dif_net_fam,xlab='Differences') # check graphically
+qqnorm(dif_net_fam) 
+qqline(dif_net_fam)
+
+shapiro.test(dif_net_div) # test = normal
+hist(dif_net_div,xlab='Differences') # check graphically
+qqnorm(dif_net_div) 
+qqline(dif_net_div)
+
+
+# Resp -> assumptions are met
+dif_resp_con <- with(Resp_con, Resp[Label == "Resp"] - Resp[Label == "ExpResp"])
+dif_resp_fam <- with(Resp_fam, Resp[Label == "Resp"] - Resp[Label == "ExpResp"])
+dif_resp_div <- with(Resp_div, Resp[Label == "Resp"] - Resp[Label == "ExpResp"])
+
+shapiro.test(dif_resp_con) # test = normal
+hist(dif_resp_con,xlab='Differences') # check graphically
+qqnorm(dif_resp_con) 
+qqline(dif_resp_con)
+
+shapiro.test(dif_resp_fam) # test = normal
+hist(dif_resp_fam,xlab='Differences') # check graphically
+qqnorm(dif_resp_fam) 
+qqline(dif_resp_fam)
+
+shapiro.test(dif_resp_div) # test = normal
+hist(dif_resp_div,xlab='Differences') # check graphically
+qqnorm(dif_resp_div) 
+qqline(dif_resp_div)
+
+
+# Gross -> assumptions are met
+dif_gross_con <- with(Gross_con, Grossphoto[Label == "Gross Photo"] - Grossphoto[Label == "ExpGross Photo"])
+dif_gross_fam <- with(Gross_fam, Grossphoto[Label == "Gross Photo"] - Grossphoto[Label == "ExpGross Photo"])
+dif_gross_div <- with(Gross_div, Grossphoto[Label == "Gross Photo"] - Grossphoto[Label == "ExpGross Photo"])
+
+shapiro.test(dif_gross_con) # test = normal
+hist(dif_gross_con,xlab='Differences') # check graphically
+qqnorm(dif_gross_con) 
+qqline(dif_gross_con)
+
+shapiro.test(dif_gross_fam) # test = normal
+hist(dif_gross_fam,xlab='Differences') # check graphically
+qqnorm(dif_gross_fam) 
+qqline(dif_gross_fam)
+
+shapiro.test(dif_gross_div) # test = normal
+hist(dif_gross_div,xlab='Differences') # check graphically
+qqnorm(dif_gross_div) 
+qqline(dif_gross_div)
+
+
+# Calc -> assumptions are met
+dif_calc_con <- with(Calc_con, Calc[Label == "Calc"] - Calc[Label == "ExpCalc"])
+dif_calc_fam <- with(Calc_fam, Calc[Label == "Calc"] - Calc[Label == "ExpCalc"])
+dif_calc_div <- with(Calc_div, Calc[Label == "Calc"] - Calc[Label == "ExpCalc"])
+
+shapiro.test(dif_calc_con) # test = normal
+hist(dif_calc_con,xlab='Differences') # check graphically
+qqnorm(dif_calc_con) 
+qqline(dif_calc_con)
+
+shapiro.test(dif_calc_fam) # test = normal
+hist(dif_calc_fam,xlab='Differences') # check graphically
+qqnorm(dif_calc_fam) 
+qqline(dif_calc_fam)
+
+shapiro.test(dif_calc_div) # test = normal
+hist(dif_calc_div,xlab='Differences') # check graphically
+qqnorm(dif_calc_div) 
+qqline(dif_calc_div)
+```
+
+```{r}
+#  compare all expected to observed/measured via an paired t.test
+
+# conspecifics
+test_net <- Net_con %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Netphoto ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni"
+   )
+
+write.table(test_net, "Graphs/Net_paired_ttest_exp_obs_con.csv", sep= ",")
+
+test_resp <-Resp_con %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Resp ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni"
+   )
+
+write.table(test_resp, "Graphs/Resp_paired_ttest_exp_obs_con.csv", sep= ",")
+
+test_gross <- Gross_con %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Grossphoto ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni"
+   )
+
+write.table(test_gross, "Graphs/Gross_paired_ttest_exp_obs_con.csv", sep= ",")
+
+
+test_calc <- Calc_con %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Calc ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni"
+   )
+
+write.table(test_calc, "Graphs/Calc_paired_ttest_exp_obs_con.csv", sep= ",")
+
+
+# family
+test_net_fam <- Net_fam %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Netphoto ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni"
+   )
+
+write.table(test_net_fam, "Graphs/Net_paired_ttest_exp_obs_fam.csv", sep= ",")
+
+test_resp_fam <-Resp_fam %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Resp ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni"
+   )
+
+write.table(test_resp_fam, "Graphs/Resp_paired_ttest_exp_obs_fam.csv", sep= ",")
+
+test_gross_fam <- Gross_fam %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Grossphoto ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni"
+   )
+
+write.table(test_gross_fam, "Graphs/Gross_paired_ttest_exp_obs_fam.csv", sep= ",")
+
+
+test_calc_fam <- Calc_fam %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Calc ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni"
+   )
+
+write.table(test_calc_fam, "Graphs/Calc_paired_ttest_exp_obs_fam.csv", sep= ",")
+
+
+#  diversity
+test_net_div <- Net_div %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Netphoto ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni"
+   )
+
+write.table(test_net_div, "Graphs/Mix_Net_paired_ttest_exp_obs_div.csv", sep= ",")
+
+test_resp_div <-Resp_div %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Resp ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni"
+   )
+
+write.table(test_resp_div, "Graphs/Mix_Resp_paired_ttest_exp_obs_div.csv", sep= ",")
+
+test_gross_div <- Gross_div %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Grossphoto ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni"
+   )
+
+write.table(test_gross_div, "Graphs/Mix_Gross_paired_ttest_exp_obs_div.csv", sep= ",")
+
+
+test_calc_div <- Calc_div %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Calc ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni"
+   )
+
+write.table(test_calc_div, "Graphs/Mix_Calc_paired_ttest_exp_obs_div.csv", sep= ",")
+```
+
+
+---------- Figure 3:Coral neighbor effects on productivity in conspecific (a-c) and diversity incubations (d-f)  ----------
+
+# Conspecifics
+```{r}
+# Make new column with stat results 'type', where statistical test result is shown
+
+# Net photo
+con_net <- Data %>% filter(category == "conspecific")%>%
+  mutate(
+  type = case_when(
+    species == "Acy_Acy_Acy" ~ "neutral",
+    species == "Amu_Amu_Amu" ~ "neutral",
+    species == "Mdi_Mdi_Mdi" ~ "neg",
+    species == "Pcy_Pcy_Pcy" ~ "pos",
+    species == "Plo_Plo_Plo" ~ "pos",
+    species == "Pru_Pru_Pru" ~ "neg",
+    species == "Pve_Pve_Pve" ~ "neutral",
+    species == "Pda_Pda_Pda" ~ "neutral",
+    species == "Spi_Spi_Spi" ~ "neutral"
+  ))
+
+con_net$species <- factor(con_net$species, levels= c("Pcy_Pcy_Pcy", "Plo_Plo_Plo", "Pru_Pru_Pru", "Acy_Acy_Acy", "Amu_Amu_Amu", "Mdi_Mdi_Mdi", "Pda_Pda_Pda", "Pve_Pve_Pve","Spi_Spi_Spi"))
+
+summary_net<- con_net %>%  group_by(species) %>%
+    summarise(
+      median = round(median(exp_obs_net_photo_perc),4),
+      mean = round(mean(exp_obs_net_photo_perc),4), 
+      sd = round(sd(exp_obs_net_photo_perc),4))
+
+con_net_comp <- left_join(con_net, summary_net)
+
+
+# Respiration
+con_resp <- Data %>% filter(category == "conspecific")%>%
+  mutate(
+  type = case_when(
+    species == "Acy_Acy_Acy" ~ "neg",
+    species == "Amu_Amu_Amu" ~ "neutral",
+    species == "Mdi_Mdi_Mdi" ~ "neutral",
+    species == "Pcy_Pcy_Pcy" ~ "neutral",
+    species == "Plo_Plo_Plo" ~ "pos",
+    species == "Pru_Pru_Pru" ~ "neutral",
+    species == "Pve_Pve_Pve" ~ "neutral",
+    species == "Pda_Pda_Pda" ~ "pos",
+    species == "Spi_Spi_Spi" ~ "neutral"
+  ))
+
+con_resp$species <- factor(con_resp$species, levels= c("Pcy_Pcy_Pcy", "Plo_Plo_Plo", "Pru_Pru_Pru", "Acy_Acy_Acy", "Amu_Amu_Amu", "Mdi_Mdi_Mdi", "Pda_Pda_Pda", "Pve_Pve_Pve","Spi_Spi_Spi")) 
+
+summary_resp<- con_resp %>%  group_by(species) %>%
+    summarise(
+      median = round(median(exp_obs_respiration_perc),4),
+      mean = round(mean(exp_obs_respiration_perc),4), 
+      sd = round(sd(exp_obs_respiration_perc),4))
+
+con_resp_comp <- left_join(con_resp, summary_resp)
+
+
+# Gross photo
+con_gross <- Data %>% filter(category == "conspecific")%>%
+  mutate(
+  type = case_when(
+    species == "Acy_Acy_Acy" ~ "neutral",
+    species == "Amu_Amu_Amu" ~ "pos",
+    species == "Mdi_Mdi_Mdi" ~ "neg",
+    species == "Pcy_Pcy_Pcy" ~ "pos",
+    species == "Plo_Plo_Plo" ~ "pos",
+    species == "Pru_Pru_Pru" ~ "neutral",
+    species == "Pve_Pve_Pve" ~ "neutral",
+    species == "Pda_Pda_Pda" ~ "pos",
+    species == "Spi_Spi_Spi" ~ "neutral"
+  ))
+
+con_gross$species <- factor(con_gross$species, levels= c("Pcy_Pcy_Pcy", "Plo_Plo_Plo", "Pru_Pru_Pru", "Acy_Acy_Acy", "Amu_Amu_Amu", "Mdi_Mdi_Mdi", "Pda_Pda_Pda", "Pve_Pve_Pve","Spi_Spi_Spi")) 
+
+summary_gross<- con_gross %>%  group_by(species) %>%
+    summarise(
+      median = round(median(exp_obs_gross_photo_perc),4),
+      mean = round(mean(exp_obs_gross_photo_perc),4), 
+      sd = round(sd(exp_obs_gross_photo_perc),4))
+
+con_gross_comp <- left_join(con_gross, summary_gross)
+
+
+# Calcification
+con_calc <- Data_calc %>% filter(category == "conspecific")%>%
+  mutate(
+  type = case_when(
+    species == "Acy_Acy_Acy" ~ "neutral",
+    species == "Amu_Amu_Amu" ~ "neutral",
+    species == "Mdi_Mdi_Mdi" ~ "neutral",
+    species == "Pcy_Pcy_Pcy" ~ "pos",
+    species == "Plo_Plo_Plo" ~ "neutral",
+    species == "Pru_Pru_Pru" ~ "neutral",
+    species == "Pve_Pve_Pve" ~ "neutral",
+    species == "Pda_Pda_Pda" ~ "neutral",
+    species == "Spi_Spi_Spi" ~ "neutral"
+  ))
+
+con_calc$species <- factor(con_calc$species, levels= c("Pcy_Pcy_Pcy", "Plo_Plo_Plo", "Pru_Pru_Pru", "Acy_Acy_Acy", "Amu_Amu_Amu", "Mdi_Mdi_Mdi", "Pda_Pda_Pda", "Pve_Pve_Pve","Spi_Spi_Spi")) 
+
+summary_calc<- con_calc %>%  group_by(species) %>%
+    summarise(
+      median = round(median(exp_obs_calc_perc),4),
+      mean = round(mean(exp_obs_calc_perc),4), 
+      sd = round(sd(exp_obs_calc_perc),4))
+
+con_calc_comp <- left_join(con_calc, summary_calc)
+```
+
+```{r}
+# Graphs showing percentage difference per conspecific
+
+# theme all graphs
+ theme <- theme_classic() +
+          theme(legend.position = "bottom",
+          legend.text = element_text(size = 15),
+          plot.margin = unit(c(1,0.2,0.2,1), "cm"),
+          axis.text.x = element_text(size = 14, color = "black", face= "italic", angle = 45, hjust= 1),
+          axis.title.x=element_blank(),
+          axis.text.y = element_text(size = 16, vjust = 0.5, color = "black"),
+          axis.title.y =element_text(hjust = 0.5, size=15,face="bold",margin=margin(0,12,0,0)))
+
+# theme without x axis text
+ theme2 <- theme_classic() +
+          theme(legend.position = "bottom",
+          legend.text = element_text(size = 15),
+          plot.margin = unit(c(1,0.2,0.2,1), "cm"),
+          axis.text.x = element_blank(),
+          axis.title.x=element_blank(),
+          axis.text.y = element_text(size = 16, vjust = 0.5, color = "black"),
+          axis.title.y =element_text(hjust = 0.5, size=15,face="bold",margin=margin(0,12,0,0)))
+
+
+# Net photo
+con_net_graph <-ggplot(con_net, aes(x =species, y = exp_obs_net_photo_perc, fill = type)) +
+  geom_boxplot(outlier.shape = NA, lwd=1) +
+  geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  ylab("\nNet photosynthesis\n(% change from expected)") +
+  scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+  scale_y_continuous(limits = c(-70, 120), breaks = seq(-60, 120, by = 20))+
+  annotate("text", x= 1, y = 120, label = "***", size= 8 )+
+  annotate("text", x= 2, y = 120, label = "***", size= 8)+
+  annotate("text", x= 3, y = 120, label = "**", size= 8)+
+  annotate("text", x= 6, y = 120, label = "**", size= 8 )+
+  annotate("text", x= 2, y = -70, label = "Poritidae", size= 4.5, fontface="bold" )+
+  annotate("text", x= 5, y = -70, label = "Acroporidae", size= 4.5, fontface="bold" )+
+  annotate("text", x= 8, y = -70, label = "Pocilloporidae", size= 4.5, fontface="bold" )+
+  geom_vline(xintercept = 3.5, linetype = 3, color="black")+
+  geom_vline(xintercept = 6.5, linetype = 3, color="black")+
+ # ggtitle("Conspecific")+
+  theme2
+
+# respiration
+con_resp_graph <-ggplot(con_resp, aes(x = species, y = exp_obs_respiration_perc, fill=type)) +
+  geom_boxplot(outlier.shape = NA, lwd=1) +
+  geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  ylab("\nRespiration\n(% change from expected)") +
+  scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+  scale_y_continuous(limits = c(-100, 200), breaks = seq(-80, 200, by = 40))+
+  annotate("text", x= 2, y = 200, label = "*", size= 8 )+
+  annotate("text", x= 4, y = 200, label = "*", size= 8 )+
+  annotate("text", x= 7, y = 200, label = "*", size= 8 )+
+  annotate("text", x= 2, y = -100, label = "Poritidae", size= 4.5, fontface="bold" )+
+  annotate("text", x= 5, y = -100, label = "Acroporidae", size= 4.5, fontface="bold" )+
+  annotate("text", x= 8, y = -100, label = "Pocilloporidae", size= 4.5, fontface ="bold" )+
+  geom_vline(xintercept = 3.5, linetype = 3, color="black")+
+  geom_vline(xintercept = 6.5, linetype = 3, color="black")+
+  theme2
+
+# gross photo
+con_gross_graph <-ggplot(con_gross, aes(x = species, y =exp_obs_gross_photo_perc, fill =type)) +
+  geom_boxplot(outlier.shape = NA, lwd=1) +
+  geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  ylab("\nGross photosynthesis\n(% change from expected)") +
+  scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+  scale_y_continuous(limits = c(-55, 100), breaks = seq(-40, 100, by = 20))+
+  annotate("text", x= 1, y = 100, label = "**", size= 8 )+
+  annotate("text", x= 2, y = 100, label = "*", size= 8 )+
+  annotate("text", x= 5, y = 100, label = "*", size= 8 )+
+  annotate("text", x= 6, y = 100, label = "**", size= 8 )+
+  annotate("text", x= 7, y = 100, label = "**", size= 8 )+
+  annotate("text", x= 2, y = -55, label = "Poritidae", size= 4.5, fontface="bold" )+
+  annotate("text", x= 5, y = -55, label = "Acroporidae", size= 4.5, fontface="bold" )+
+  annotate("text", x= 8, y = -55, label = "Pocilloporidae", size= 4.5, fontface="bold" )+
+  geom_vline(xintercept = 3.5, linetype = 3, color="black")+
+  geom_vline(xintercept = 6.5, linetype = 3, color="black")+
+  theme
+```
+
+# diverse heterospecific
+```{r}
+# Make new column with stat results 'type_2', where statistical test result is shown
+
+# Net photo
+mix_net <- Data %>% filter(category == "mix")%>%
+  mutate(
+  type_2 = case_when(
+    species == "Pda_Acy_Pcy" ~ "pos",
+    species == "Pda_Amu_Plo" ~ "neutral",
+    species == "Pda_Amu_Pru" ~ "neutral",
+    species == "Pda_Mdi_Plo" ~ "neutral",
+    species == "Pve_Acy_Pru" ~ "neutral",
+    species == "Pve_Amu_Plo" ~ "neutral",
+    species == "Pve_Mdi_Pcy" ~ "neg",
+    species == "Pve_Mdi_Pru" ~ "neg",
+    species == "Spi_Acy_Pcy" ~ "neutral",
+    species == "Spi_Acy_Plo" ~ "neutral",
+    species == "Spi_Amu_Pcy" ~ "neutral",
+    species == "Spi_Mdi_Pru" ~ "neg"
+  ))
+
+######## Order as net photo median ascending
+mix_net$species <- factor(mix_net$species, levels = c("Pve_Mdi_Pru", "Spi_Mdi_Pru", "Pve_Mdi_Pcy","Spi_Acy_Pcy","Pda_Mdi_Plo", "Pda_Amu_Pru","Spi_Amu_Pcy","Pve_Acy_Pru","Spi_Acy_Plo", "Pve_Amu_Plo","Pda_Acy_Pcy", "Pda_Amu_Plo"))
+
+
+# Respiration
+# type colume where statistical test result is shown
+mix_resp <- Data %>% filter(category == "mix")%>%
+  mutate(
+  type_2 = case_when(
+    species == "Pda_Acy_Pcy" ~ "neutral",
+    species == "Pda_Amu_Plo" ~ "neutral",
+    species == "Pda_Amu_Pru" ~ "neutral",
+    species == "Pda_Mdi_Plo" ~ "neutral",
+    species == "Pve_Acy_Pru" ~ "neutral",
+    species == "Pve_Amu_Plo" ~ "pos",
+    species == "Pve_Mdi_Pcy" ~ "neutral",
+    species == "Pve_Mdi_Pru" ~ "neutral",
+    species == "Spi_Acy_Pcy" ~ "neg",
+    species == "Spi_Acy_Plo" ~ "neg",
+    species == "Spi_Amu_Pcy" ~ "neg",
+    species == "Spi_Mdi_Pru" ~ "neutral"
+  ))
+
+######## Order as net photo median ascending
+mix_resp$species <- factor(mix_resp$species, levels = c("Pve_Mdi_Pru", "Spi_Mdi_Pru", "Pve_Mdi_Pcy","Spi_Acy_Pcy","Pda_Mdi_Plo", "Pda_Amu_Pru","Spi_Amu_Pcy","Pve_Acy_Pru","Spi_Acy_Plo", "Pve_Amu_Plo","Pda_Acy_Pcy", "Pda_Amu_Plo"))
+
+
+# Gross photo
+# type colume where statistical test result is shown
+mix_gross <- Data %>% filter(category == "mix")%>%
+  mutate(
+  type_2 = case_when(
+    species == "Pda_Acy_Pcy" ~ "neutral",
+    species == "Pda_Amu_Plo" ~ "neutral",
+    species == "Pda_Amu_Pru" ~ "neutral",
+    species == "Pda_Mdi_Plo" ~ "neutral",
+    species == "Pve_Acy_Pru" ~ "neutral",
+    species == "Pve_Amu_Plo" ~ "pos",
+    species == "Pve_Mdi_Pcy" ~ "neutral",
+    species == "Pve_Mdi_Pru" ~ "neg",
+    species == "Spi_Acy_Pcy" ~ "neg",
+    species == "Spi_Acy_Plo" ~ "neutral",
+    species == "Spi_Amu_Pcy" ~ "neg",
+    species == "Spi_Mdi_Pru" ~ "neg"
+  ))
+
+######## Order as net photo median ascending
+mix_gross$species <- factor(mix_gross$species, levels = c("Pve_Mdi_Pru", "Spi_Mdi_Pru", "Pve_Mdi_Pcy","Spi_Acy_Pcy","Pda_Mdi_Plo", "Pda_Amu_Pru","Spi_Amu_Pcy","Pve_Acy_Pru","Spi_Acy_Plo", "Pve_Amu_Plo","Pda_Acy_Pcy", "Pda_Amu_Plo"))
+
+
+# Calcification
+# type colume where statistical test result is shown
+mix_calc <- Data_calc %>% filter(category == "mix")%>%
+  mutate(
+  type_2 = case_when(
+    species == "Pda_Acy_Pcy" ~ "neutral",
+    species == "Pda_Amu_Plo" ~ "neutral",
+    species == "Pda_Amu_Pru" ~ "neutral",
+    species == "Pda_Mdi_Plo" ~ "neutral",
+    species == "Pve_Acy_Pru" ~ "neutral",
+    species == "Pve_Amu_Plo" ~ "neutral",
+    species == "Pve_Mdi_Pcy" ~ "neutral",
+    species == "Pve_Mdi_Pru" ~ "neg",
+    species == "Spi_Acy_Pcy" ~ "neutral",
+    species == "Spi_Acy_Plo" ~ "neutral",
+    species == "Spi_Amu_Pcy" ~ "neutral",
+    species == "Spi_Mdi_Pru" ~ "neg"
+  ))
+
+######## Order as net photo median ascending
+mix_calc$species <- factor(mix_calc$species, levels = c("Pve_Mdi_Pru", "Spi_Mdi_Pru", "Pve_Mdi_Pcy","Spi_Acy_Pcy","Pda_Mdi_Plo", "Pda_Amu_Pru","Spi_Amu_Pcy","Pve_Acy_Pru","Spi_Acy_Plo", "Pve_Amu_Plo","Pda_Acy_Pcy", "Pda_Amu_Plo"))
+```
+
+```{r}
+# Graphs showing percentage difference per diversity incubation
+
+# net photo
+div_net_graph <- ggplot(mix_net, aes(x = reorder(species, exp_obs_net_photo_perc, median), y = exp_obs_net_photo_perc, fill = type_2)) +
+  geom_boxplot(outlier.shape = NA, lwd=1) +
+  geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  ylab("\nNet photosynthesis\n(% change from expected)") +
+  scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+  #scale_y_continuous(breaks = seq(-40, 80, by = 40))+
+  scale_y_continuous(limits = c(-70, 120), breaks = seq(-60, 120, by = 20))+
+  annotate("text", x= 1, y = 120, label = "**", size= 8 )+
+  annotate("text", x= 2, y = 120, label = "**", size= 8)+
+  annotate("text", x= 3, y = 120, label = "**", size= 8)+
+  annotate("text", x= 11, y = 120, label = "*", size= 8 )+
+  #annotate("text", x= -0.4, y = -71, label = "Poritidae", size=4, fontface= "bold")+
+  #annotate("text", x= -0.9, y = -80, label = "Acroporidae", size=4, fontface= "bold")+
+  #annotate("text", x= -0.4, y = -97, label = "Pocilloporidae", size=4, fontface= "bold")+
+  coord_cartesian(ylim= c(-70, 120), xlim = c(1,12), clip = "off")+
+ # ggtitle("Multi-family")+
+  theme2
+
+
+# respiration
+div_resp_graph <-ggplot(mix_resp, aes(x = species, y = exp_obs_respiration_perc, fill=type_2)) +
+  geom_boxplot(outlier.shape = NA, lwd=1) +
+  geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  ylab("\nRespiration\n(% change from expected)") +
+  scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+  #scale_y_continuous(breaks = seq(-40, 80 , by = 40))+
+  scale_y_continuous(limits = c(-100, 200), breaks = seq(-80, 200, by = 40))+
+  annotate("text", x= 4, y = 200, label = "*", size= 8 )+
+  annotate("text", x= 7, y = 200, label = "**", size= 8 )+
+  annotate("text", x= 9, y = 200, label = "*", size= 8 )+
+  annotate("text", x= 10, y = 200, label = "*", size= 8 )+
+  #annotate("text", x= -0.8, y = -67, label = "Poritidae", size=4, fontface= "bold")+
+  #annotate("text", x= -1.9, y = -82, label = "Acroporidae", size=4, fontface= "bold")+
+  #annotate("text", x= -3, y = -97, label = "Pocilloporidae", size=4, fontface= "bold")+
+ coord_cartesian(ylim= c(-100, 200), xlim = c(1,12), clip = "off")+
+  theme2
+
+
+# gross photo
+div_gross_graph <-ggplot(mix_gross, aes(x = species, y =exp_obs_gross_photo_perc, fill =type_2)) +
+  geom_boxplot(outlier.shape = NA, lwd=1) +
+  geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  ylab("\nGross photosynthesis\n(% change from expected)") +
+  scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+  #scale_y_continuous(breaks = seq(-40, 40, by = 20))+
+  scale_y_continuous(breaks = seq(-40, 100, by = 20))+
+  annotate("text", x= 1, y = 100, label = "*", size= 8 )+
+  annotate("text", x= 2, y = 100, label = "**", size= 8 )+
+  annotate("text", x= 4, y = 100, label = "*", size= 8 )+
+  annotate("text", x= 7, y = 100, label = "*", size= 8 )+
+  annotate("text", x= 10, y = 100, label = "*", size= 8 )+
+  annotate("text", x= -0.82, y = -72, label = "Poritidae", size=4.5, fontface= "bold")+
+  annotate("text", x= -2.1, y = -88, label = "Acroporidae", size=4.5, fontface= "bold")+
+  annotate("text", x= -3.2, y = -104, label = "Pocilloporidae", size=4.5, fontface= "bold")+
+  coord_cartesian(ylim= c(-55, 100), xlim = c(1,12), clip = "off")+
+  theme
+
+
+# calcification
+div_calc_graph <-ggplot(mix_calc, aes(x = species, y = exp_obs_calc_perc, fill =type_2)) +
+  geom_boxplot(outlier.shape = NA, lwd=1) +
+   geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  ylab("\nCalcification\n(% change from expected)") +
+   scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+ scale_y_continuous(limits = c(-100, 270), breaks = seq(-100, 200, by = 50))+
+    theme
+```
+
+# Figure 3 complete
+```{r}
+# combine graphs
+# arrange all plots together
+
+arranged_perc_conmix <-
+        con_net_graph + div_net_graph +
+        con_resp_graph + div_resp_graph +
+        con_gross_graph +  div_gross_graph +
+          plot_layout( ncol = 2, nrow =3, guides = "collect") +
+          plot_annotation( title = "                                           Conspecific                                                                              Multi-family",tag_levels = list(c("a)","d)", "b)", "e)", "c)", "f)"))) &
+          theme(plot.tag = element_text(size = 18, face="bold"),
+                plot.tag.position = c(0.05,0.98),
+                plot.title= element_text(size = 16, face="bold"),
+                legend.position = "bottom",
+                legend.text = element_text(size = 16))
+
+ggsave("Graphs/All_mixANDcon_perc.png", width=12, height= 13, limitsize=FALSE, dpi= 700, arranged_perc_conmix)
+```
+
+
+---------- test if conspecifics have larger impact than diverse heterospecific neighbours ----------
+```{r include=FALSE}
+#Get conspecific and diverse incubations and make absolute values, so we have difference from zero in one direction
+Con_mix <- Data %>% filter(category=="mix" | category == "conspecific") %>% 
+  mutate(change_net = abs(exp_obs_net_photo_perc),
+         change_resp = abs(exp_obs_respiration_perc),
+         change_gross = abs(exp_obs_gross_photo_perc))
+
+Con_mix_calc <- Data_calc %>% filter(category=="mix" | category == "conspecific") %>% 
+  mutate(change_calc = abs(exp_obs_calc_perc))
+
+
+Con_mix$category <- as.factor(Con_mix$category)
+Con_mix_calc$category <- as.factor(Con_mix_calc$category)
+# test normality -> requirement not met
+shapiro.test(Con_mix$change_gross)
+
+# use non-parametric test
+wilcox.test(change_net~category, data = Con_mix)
+wilcox.test(change_resp~category, data = Con_mix)
+wilcox.test(change_gross~category, data = Con_mix)
+wilcox.test(change_calc~category, data = Con_mix_calc)
+
+wilcox.test(exp_obs_net_photo_perc~category, data = Con_mix)
+wilcox.test(exp_obs_respiration_perc~category, data = Con_mix)
+wilcox.test(exp_obs_gross_photo_perc~category, data = Con_mix)
+wilcox.test(exp_obs_calc_perc~category, data = Con_mix_calc)
+
+# calculate effect size overall
+wilcox_effsize(change_net~category, data = Con_mix)
+wilcox_effsize(change_resp~category, data = Con_mix)
+wilcox_effsize(change_gross~category, data = Con_mix)
+wilcox_effsize(change_calc~category, data = Con_mix_calc)
+```
+
+
+---------- Figure 4 Physiological response to coral neighbors (Lollipop chart) ---------- 
+```{r}
+#-------------------- conspecifics
+
+# prepare data to get get median per species for all three productivity parameters
+summary_net$name <- "net"
+summary_resp$name <- "resp"
+summary_gross$name <- "gross"
+
+# combine net photosynthesis, respiration and gross photosynthesis
+final_median <- rbind(summary_net, summary_resp, summary_gross)
+final_median$name <- factor(final_median$name, levels= c("net","resp","gross"))
+
+# arrange order of species
+final_median$species <- factor(final_median$species, levels= c("Pcy_Pcy_Pcy", "Plo_Plo_Plo", "Pru_Pru_Pru","Acy_Acy_Acy","Amu_Amu_Amu","Mdi_Mdi_Mdi","Pda_Pda_Pda","Pve_Pve_Pve", "Spi_Spi_Spi"))
+
+# theme
+theme_lolli <-  theme_classic() +
+                theme(legend.position = "bottom",
+                legend.text = element_text(size = 10),
+                plot.margin = unit(c(0.5,0.2,0.2,1), "cm"),
+                axis.text.x = element_text(size = 8, color = "black", face="italic", angle = 45, hjust=1),
+                axis.title.x=element_blank(),
+                axis.text.y = element_text(size = 9, vjust = 0.5, color = "black"),
+                axis.title.y =element_text(hjust = 0.5, size=9,face="bold",margin=margin(0,12,0,0)))
+
+theme_lolli2 <-  theme_classic() +
+                theme(
+                legend.position = "none",
+                plot.margin = unit(c(0.5,0.2,0.2,1), "cm"),
+                axis.text.x = element_blank(),
+                axis.title.x=element_blank(),
+                axis.text.y = element_text(size = 9, vjust = 0.5, color = "black"),
+                axis.title.y =element_text(hjust = 0.5, size=9,face="bold",margin=margin(0,12,0,0)))
+
+# Lollipop graph
+con_lolli <-ggplot(final_median, aes(x= species, y=median, color=name))+
+  geom_hline(yintercept = 0, linetype = 2, color = "black") +
+  geom_linerange(aes(x = species, ymin = median, ymax = 0), position = position_dodge(width = 0.5)) +
+  geom_point(position = position_dodge(width = 0.5), size = 3, shape = 18)+
+  scale_y_continuous(limits = c(-40, 65), breaks = seq(-40, 60, by = 20))+
+  ylab("Conspecific productivity\nper species")+
+  scale_color_manual("", values= c("gross" ="#C81ACC","net" = "#F16226", "resp"= "#44AA99"),labels = c("gross" = "gross photosynthesis", "net" = "net photosynthesis", "resp" = "respiration"))+
+  scale_x_discrete("", labels = c("Acy_Acy_Acy"="A. cytherea", "Amu_Amu_Amu"="A. muricata", "Mdi_Mdi_Mdi"="M. digitata", "Pve_Pve_Pve"="P. verrucosa", "Pda_Pda_Pda"="P. damicornis", "Spi_Spi_Spi"="S. pistillata", "Plo_Plo_Plo"="P. lobata", "Pcy_Pcy_Pcy"="P. cylindrica", "Pru_Pru_Pru"="P. rus"))+
+  annotate("text", x= 2, y = -40, label = "Poritidae", size= 3, fontface="bold" )+
+  annotate("text", x= 5, y = -40, label = "Acroporidae", size= 3, fontface="bold" )+
+  annotate("text", x= 8, y = -40, label = "Pocilloporidae", size= 3, fontface="bold" )+
+  geom_vline(xintercept = 3.5, linetype = 3, color="black")+
+  geom_vline(xintercept = 6.5, linetype = 3, color="black")+
+  guides(color ="none")+
+  theme_lolli2
+```
+
+```{r}
+#-------------------- diverse heterospecific
+
+mix <- Data %>% filter(category == "mix")
+mix_calc <- Data_calc %>%  filter(category == "mix")
+
+# get sum of median per species
+mix_r <- mix %>% group_by(species) %>% mutate( median_net = median(exp_obs_net_photo_perc),
+                                               median_res = median (exp_obs_respiration_perc),
+                                               median_gross = median(exp_obs_gross_photo_perc))
+
+mix_me <- mix_r %>%  summarise(   uni_net_median = unique(median_net),
+                                  uni_res_median = unique(median_res),
+                                  uni_gross_median = unique(median_gross))
+
+# Calcification measurements
+mix_calc_r <- mix_calc %>% group_by(species) %>% mutate( median_calc = median(calc_umol_cm2_h))
+
+mix_me_calc <- mix_calc_r %>%  summarise(uni_calc_median = unique(median_calc))
+
+#get median sum for each species
+combi_long <- mix_me %>% separate_rows(species, sep="_")
+mesum <- combi_long %>% 
+  group_by(species) %>% 
+  summarise(
+    median_sum_net_mix = sum(uni_net_median),
+    median_sum_resp_mix = sum(uni_res_median),
+    median_sum_gross_mix = sum(uni_gross_median)
+  )
+
+combi_long_calc <- mix_me_calc %>% separate_rows(species, sep="_")
+mesum_calc <- combi_long_calc %>% 
+  group_by(species) %>% 
+  summarise(
+    median_sum_calc_mix = sum(uni_calc_median)
+  )
+
+
+# add calc
+median_sum_mix <- left_join(mesum, mesum_calc)
+median_long_mix <- combi_long
+
+
+# get columns melted 
+sum_median <- median_sum_mix %>% dplyr::select(species, median_sum_net_mix, median_sum_resp_mix, median_sum_gross_mix, median_sum_calc_mix)
+final_summedian_mix <- pivot_longer(sum_median, median_sum_net_mix:median_sum_calc_mix)
+
+
+long_median <- median_long_mix %>% dplyr::select(species, uni_net_median, uni_res_median, uni_gross_median)
+final_longmedian_mix <- pivot_longer(long_median, uni_net_median:uni_gross_median)
+
+
+# name families
+final_summedian_mix <- final_summedian_mix %>%
+  mutate(family= case_when(
+    species == "Amu"~ "Acroporidae",
+    species == "Acy"~ "Acroporidae",
+    species == "Mdi"~ "Acroporidae",
+    species == "Pru"~ "Poritidae",
+    species == "Pcy"~ "Poritidae",
+    species == "Plo"~ "Poritidae",
+    species == "Pve"~ "Pocilloporidae",
+    species == "Spi"~ "Pocilloporidae",
+    species == "Pda"~ "Pocilloporidae",
+    ))
+
+final_longmedian_mix <- final_longmedian_mix %>%
+  mutate(family= case_when(
+    species == "Amu"~ "Acroporidae",
+    species == "Acy"~ "Acroporidae",
+    species == "Mdi"~ "Acroporidae",
+    species == "Pru"~ "Poritidae",
+    species == "Pcy"~ "Poritidae",
+    species == "Plo"~ "Poritidae",
+    species == "Pve"~ "Pocilloporidae",
+    species == "Spi"~ "Pocilloporidae",
+    species == "Pda"~ "Pocilloporidae",
+    ))
+
+#exclude calcification
+ final_summedian_mix <- final_summedian_mix %>% filter(name != "median_sum_calc_mix")
+  
+# arrange order of factors
+ final_summedian_mix$name <-  factor(final_summedian_mix$name, levels = c("median_sum_net_mix", "median_sum_resp_mix", "median_sum_gross_mix"))
+ final_summedian_mix$species <-  factor(final_summedian_mix$species, levels = c("Pcy", "Plo", "Pru","Acy", "Amu", "Mdi", "Pda", "Pve","Spi"))
+ 
+  final_longmedian_mix$name <-  factor(final_longmedian_mix$name, levels = c("uni_net_median", "uni_res_median", "uni_gross_median"))
+ final_longmedian_mix$species <-  factor(final_longmedian_mix$species, levels = c("Pcy", "Plo", "Pru","Acy", "Amu", "Mdi", "Pda", "Pve","Spi"))
+ 
+ # get in long dataframe extra column with mean per species
+ final_longmedian_mix_2 <- final_longmedian_mix %>% 
+  group_by(species, name) %>% 
+  summarise(
+    value_mean = mean(value),
+    value = value
+  )
+ 
+# Lolopopchart of diversity incubations
+div_lolli <- 
+  ggplot(final_longmedian_mix_2, aes(x = species, y = value_mean, color=name)) +
+    geom_hline(yintercept = 0, linetype = 2, color = "black") +
+    geom_linerange(aes(x = species, ymin = value_mean, ymax = 0), position = position_dodge(width = 0.5)) +
+    geom_point(position = position_dodge(width = 0.5), size = 3, shape = 18)+
+    scale_color_manual("", values= c("uni_gross_median" ="#C81ACC","uni_net_median" = "#F16226", "uni_res_median"= "#44AA99"),labels = c("uni_gross_median" = "gross photosynthesis", "uni_net_median" = "net photosynthesis", "uni_res_median" = "respiration"))+
+    geom_point(aes(x=species, y=value, fill=name), position = position_dodge(width = 0.5), size=0.5, shape=21, color="black")+
+    ylab("Species contribution\nto multi-family productivity")+
+    scale_fill_manual("", values= c("uni_gross_median" ="#C81ACC","uni_net_median" = "#F16226", "uni_res_median"= "#44AA99"),labels = c("uni_gross_median" = "gross photosynthesis", "uni_net_median" = "net photosynthesis", "uni_res_median" = "respiration"))+
+    scale_x_discrete("", labels = c("Acy"="A. cytherea", "Amu"="A. muricata", "Mdi"="M. digitata", "Pve"="P. verrucosa", "Pda"="P. damicornis", "Spi"="S. pistillata", "Plo"="P. lobata", "Pcy"="P. cylindrica", "Pru"="P. rus"))+
+    scale_y_continuous(limits = c(-40, 65), breaks = seq(-40, 60, by = 20))+
+    annotate("text", x= 2, y = -40, label = "Poritidae", size= 3, fontface="bold" )+
+    annotate("text", x= 5, y = -40, label = "Acroporidae", size= 3, fontface="bold" )+
+    annotate("text", x= 8, y = -40, label = "Pocilloporidae", size= 3, fontface="bold" )+
+    geom_vline(xintercept = 3.5, linetype = 3, color="black")+
+    geom_vline(xintercept = 6.5, linetype = 3, color="black")+
+    guides(fill ="none", color="none")+
+    theme_lolli2
+```
+
+# Lollipopgraph consp. minus multi-family medians
+```{r}
+# get average median value
+mix_dif <-  final_longmedian_mix %>%
+  group_by(species, name) %>% 
+  summarise(
+    value_mean = mean(value)
+  )
+
+mix_dif <- mix_dif %>% mutate(value_mean = abs(value_mean))
+
+mix_dif <- mix_dif%>% 
+  mutate(name= fct_recode(name, "net" = "uni_net_median",
+                          "resp" = "uni_res_median",
+                          "gross" = "uni_gross_median"))
+
+# get average median value  conspecific
+con_dif <- final_median %>% select(species, name, median)
+
+con_dif <- con_dif%>% 
+  mutate(species= fct_recode(species, "Acy" = "Acy_Acy_Acy",
+                                    "Amu" = "Amu_Amu_Amu",
+                                    "Mdi" = "Mdi_Mdi_Mdi",
+                                    "Pve" = "Pve_Pve_Pve",
+                                    "Pda" = "Pda_Pda_Pda",
+                                    "Spi" = "Spi_Spi_Spi", 
+                                    "Plo" = "Plo_Plo_Plo",
+                                    "Pcy" = "Pcy_Pcy_Pcy",
+                                    "Pru" = "Pru_Pru_Pru"))
+
+con_dif <- con_dif %>% mutate(median = abs(median))
+
+mix_con_dif <- full_join(mix_dif, con_dif)
+
+# calculate difference
+mix_con_dif <- mix_con_dif %>% mutate(minus= median - value_mean)
+
+differ_lolli <- 
+  ggplot(mix_con_dif, aes(x = species, y = minus, color=name)) +
+    geom_hline(yintercept = 0, linetype = 2, color = "black") +
+    geom_linerange(aes(x = species, ymin = minus, ymax = 0), position = position_dodge(width = 0.5)) +
+    geom_point(position = position_dodge(width = 0.5), size = 3, shape = 18)+
+    ylab("Effect strength\n(conspecific vs multi-family)")+
+    scale_color_manual("", values= c("gross" ="#C81ACC","net" = "#F16226", "resp"= "#44AA99"),labels = c("gross" = "gross photosynthesis", "net" = "net photosynthesis", "resp" = "respiration"))+
+    scale_x_discrete("", labels = c("Acy"="A. cytherea", "Amu"="A. muricata", "Mdi"="M. digitata", "Pve"="P. verrucosa", "Pda"="P. damicornis", "Spi"="S. pistillata", "Plo"="P. lobata", "Pcy"="P. cylindrica", "Pru"="P. rus"))+
+    scale_y_continuous(limits = c(-40, 65), breaks = seq(-40, 60, by = 20))+
+    geom_segment(aes(x = 9.3, y = 1.5, xend = 9.3, yend = 65), size=0.5, color = "black",
+                 lineend = "round", linejoin = "round",
+                  arrow = arrow(length = unit(0.2, "cm")))+
+    geom_segment(aes(x = 9.3, y = -1.5, xend = 9.3, yend = -40), size=0.5, color = "black",
+                 lineend = "round", linejoin = "round",
+                  arrow = arrow(length = unit(0.2, "cm")))+
+    annotate("text", x= 9.5, y = 32, label = "Conspecific", size= 2.9, fontface="bold", angle= 90 )+
+    annotate("text", x= 9.5, y = -22, label = "Multi-family", size= 2.9, fontface="bold", angle= 90 )+
+    annotate("text", x= 2, y = -40, label = "Poritidae", size= 3, fontface="bold" )+
+    annotate("text", x= 5, y = -40, label = "Acroporidae", size= 3, fontface="bold" )+
+    annotate("text", x= 8, y = -40, label = "Pocilloporidae", size= 3, fontface="bold" )+
+    geom_vline(xintercept = 3.5, linetype = 3, color="black")+
+    geom_vline(xintercept = 6.5, linetype = 3, color="black")+
+    theme_lolli
+
+```
+
+
+
+
+```{r}
+# combine median lollipop graphs of conspecific and diversity incubations
+
+# arrange median mix and conspecific
+arranged_condiv_lolli <-
+        con_lolli + div_lolli + differ_lolli+
+          plot_layout( ncol = 1, nrow =3) +
+          plot_annotation(tag_levels = list(c("a)","b)", "c)"))) &
+          theme(plot.tag = element_text(size = 12, face="bold"),
+                plot.tag.position = c(0.01,0.99),
+                legend.position = "bottom",
+                legend.text = element_text(size = 10))
+
+
+ggsave("Graphs/con_div_median_expob_lolli.png", width=7, height=8, limitsize=FALSE, dpi= 700, arranged_condiv_lolli)
+```
+
+
+---------- summary stats ----------
+```{r}
+# conspecific incubations
+mean_net <- con_net %>% group_by(species) %>% summarise(mean_net= round(mean(exp_obs_net_photo_perc),1),
+                                                        sd_net=round(sd(exp_obs_net_photo_perc),1))
+mean_resp <- con_resp %>% group_by(species) %>% summarise(mean_resp= round(mean(exp_obs_respiration_perc),1),
+                                                        sd_resp=round(sd(exp_obs_respiration_perc),1))
+mean_gross <- con_gross %>% group_by(species) %>% summarise(mean_gross= round(mean(exp_obs_gross_photo_perc),1),
+                                                        sd_gross=round(sd(exp_obs_gross_photo_perc),1))
+
+mean_con <- mean_net %>% left_join(mean_resp, by= "species") %>% left_join(mean_gross, by= "species")
+
+write.csv(mean_con, "Graphs/mean_con_exp_obs.csv")
+
+# diversity incubations
+mean_net <- mix_net %>% group_by(species) %>% summarise(mean_net= round(mean(exp_obs_net_photo_perc),1),
+                                                        sd_net=round(sd(exp_obs_net_photo_perc),1))
+mean_resp <- mix_resp %>% group_by(species) %>% summarise(mean_resp= round(mean(exp_obs_respiration_perc),1),
+                                                        sd_resp=round(sd(exp_obs_respiration_perc),1))
+mean_gross <- mix_gross %>% group_by(species) %>% summarise(mean_gross= round(mean(exp_obs_gross_photo_perc),1),
+                                                        sd_gross=round(sd(exp_obs_gross_photo_perc),1))
+
+mean_mix <- mean_net %>% left_join(mean_resp, by= "species") %>% left_join(mean_gross, by= "species")
+
+write.csv(mean_mix, "Graphs/mean_mix_exp_obs.csv")
+```
+
+
+---------- paired t-test between observed/measured and expected values in biomass incubations ----------
+```{r}
+Net_bio <- Net_melt %>%  filter(category == "biomass")
+Net_bio <- Net_bio %>% filter(category == "biomass")
+dif_net_bio <- with(Net_bio, Netphoto[Label == "Net Photo"] - Netphoto[Label == "ExpNet Photo"])
+
+shapiro.test(dif_net_bio) # test
+hist(dif_net_bio,xlab='Differences') # check graphically
+qqnorm(dif_net_bio) 
+qqline(dif_net_bio)
+
+ Net_bio %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Netphoto ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni")
+ 
+ 
+Resp_bio <- Resp_melt %>%  filter(category == "biomass")
+Resp_bio <- Resp_bio %>% filter(category == "biomass")
+dif_Resp_bio <- with(Resp_bio, Resp[Label == "Resp"] - Resp[Label == "ExpResp"])
+
+shapiro.test(dif_Resp_bio) # test
+hist(dif_Resp_bio,xlab='Differences') # check graphically
+qqnorm(dif_Resp_bio) 
+qqline(dif_Resp_bio)
+
+ Resp_bio %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Resp ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni")
+ 
+ 
+ Gross_bio <- Gross_melt %>%  filter(category == "biomass")
+Gross_bio <- Gross_bio %>% filter(category == "biomass")
+dif_Gross_bio <- with(Gross_bio, Grossphoto[Label == "Gross Photo"] - Grossphoto[Label == "ExpGross Photo"])
+
+shapiro.test(dif_Gross_bio) # test
+hist(dif_Gross_bio,xlab='Differences') # check graphically
+qqnorm(dif_Gross_bio) 
+qqline(dif_Gross_bio)
+
+ Gross_bio %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Grossphoto ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni")
+ 
+ 
+ Calc_bio <- Calc_melt %>%  filter(category == "biomass")
+Calc_bio <- Calc_bio %>% filter(category == "biomass")
+dif_Calc_bio <- with(Calc_bio, Calc[Label == "Calc"] - Calc[Label == "ExpCalc"])
+
+shapiro.test(dif_Calc_bio) # test
+hist(dif_Calc_bio,xlab='Differences') # check graphically
+qqnorm(dif_Calc_bio) 
+qqline(dif_Calc_bio)
+
+ Calc_bio %>%
+   group_by(species) %>%
+   pairwise_t_test(
+     Calc ~ Label,
+     paired = TRUE,
+     p.adjust.method = "bonferroni")
+```

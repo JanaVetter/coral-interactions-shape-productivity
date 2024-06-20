@@ -1,0 +1,324 @@
+
+---------- load packages ----------
+```{r include=FALSE}
+library(tidyverse)
+library(ggpubr)
+library(patchwork)
+library(nlme)
+library(multcomp)
+library(car)
+library(emmeans)
+library(ggtext)
+```
+
+
+---------- load and adjust data ----------
+```{r include=FALSE}
+Data <- read_csv("Data/All_expectedvalues.csv") 
+
+# Get only species column
+Data$species <- Data$fragment_ID %>% gsub("A1", "", .) %>% gsub("A2", "", .) %>% gsub("A3", "",.)%>% gsub("A4", "",.)%>% gsub("B1", "", .) %>% gsub("B2", "", .) %>% gsub("B3", "", .)%>% gsub("B4", "",.)%>% gsub("C1", "", .) %>% gsub("C2", "", .) %>% gsub("C3", "", .) %>% gsub("C4", "",.) %>%
+gsub("D1", "", .) %>% gsub("D2", "", .) %>% gsub("D3", "", .) %>% gsub("D4", "",.) %>% gsub("E1", "", .) %>% gsub("E2", "", .) %>% gsub("E3", "", .) %>% gsub("E4", "",.) %>% gsub("F1", "", .) %>% gsub("F2", "", .) %>% gsub("F3", "", .) %>% gsub("F4", "",.)
+```
+
+```{r}
+# Splitting dataframe in useful groups
+
+single <- Data %>%  filter(category == "single")%>% 
+        mutate(family= as.factor(family))
+
+# drop 3 empty rows for calc
+single_c <- single %>% drop_na(calc_umol_cm2_h)
+
+# drop Na rows of O2 values
+single <- single %>% drop_na(net_photo_h_surface)
+```
+
+
+---------- One way ANOVA between the three families with fragment ID as random factor ----------
+```{r}
+# check data
+table(single$family, single$fragment_ID)
+table(single_c$family, single_c$fragment_ID)
+table(single$family, single$run)
+single$run <-as.factor(single$run)
+
+# analysis net photosynthesis
+mod_frag_n <- lme(net_photo_h_surface ~ family, random= ~1|fragment_ID, data=single)
+summary(mod_frag_n)
+anova(mod_frag_n)
+posthoc_n <- glht(mod_frag_n,linfct=mcp(family="Tukey"),test= adjusted("bonfer"))
+summary(posthoc_n)
+
+# analysis respiration
+mod_frag_r <- lme(respiration_h_surface ~ family, random= ~1|fragment_ID, data=single)
+summary(mod_frag_r)
+anova(mod_frag_r)
+posthoc_r <- glht(mod_frag_r,linfct=mcp(family="Tukey"),test= adjusted("bonfer"))
+summary(posthoc_r)
+
+# analysis gross photosynthesis
+mod_frag_g <- lme(sqrt(gross_photo_h_surface) ~ family, random= ~1|fragment_ID, data=single) #square root transformed
+summary(mod_frag_g)
+anova(mod_frag_g)
+posthoc_g <- glht(mod_frag_g,linfct=mcp(family="Tukey"),test= adjusted("bonfer"))
+summary(posthoc_g)
+
+# analysis calcification
+mod_frag_c <- lme(calc_umol_cm2_h ~ family, random = ~1|fragment_ID, data=single_c)
+summary(mod_frag_c)
+anova(mod_frag_c)
+posthoc_c <- glht(mod_frag_c,linfct=mcp(family="Tukey"),test= adjusted("bonfer"))
+summary(posthoc_c)
+```
+
+```{r}
+#check model assumptions by checking residuals
+
+# net photosynthesis
+shapiro.test(resid(mod_frag_n)) # looks graphically fine
+leveneTest(residuals(mod_frag_n)~single$family)
+bartlett.test(residuals(mod_frag_n)~single$family)
+hist(resid(mod_frag_n))
+qqnorm(resid(mod_frag_n))
+qqline(resid(mod_frag_n))
+plot(resid(mod_frag_n)~fitted(mod_frag_n))
+
+# respiration
+shapiro.test(resid(mod_frag_r)) # looks graphically fine
+leveneTest(residuals(mod_frag_r)~single$family)
+hist(resid(mod_frag_r))
+qqnorm(resid(mod_frag_r))
+qqline(resid(mod_frag_r))
+plot(resid(mod_frag_r)~fitted(mod_frag_r))
+
+# gross photosynthesis
+shapiro.test(resid(mod_frag_g)) #sqrt transformnation was necessary
+leveneTest(residuals(mod_frag_g)~single$family)
+hist(resid(mod_frag_g))
+qqnorm(resid(mod_frag_g))
+qqline(resid(mod_frag_g))
+plot(resid(mod_frag_g)~fitted(mod_frag_g))
+
+# calcification
+shapiro.test(resid(mod_frag_c)) # looks graphically fine
+leveneTest(residuals(mod_frag_c)~single_c$family)
+hist(resid(mod_frag_c))
+qqnorm(resid(mod_frag_c))
+qqline(resid(mod_frag_c))
+plot(resid(mod_frag_c)~fitted(mod_frag_c))
+```
+
+
+---------- Results Graph: Figure 2 Productivity of nine stony coral species from three families ----------
+```{r include=FALSE}
+# set order of families
+single$species <- factor(single$species, levels= c("Pcy", "Plo", "Pru", "Acy", "Amu", "Mdi", "Pda", "Pve","Spi"))
+single_c$species <- factor(single_c$species, levels= c("Pcy", "Plo", "Pru", "Acy", "Amu", "Mdi", "Pda", "Pve","Spi"))
+
+# theme for species graphs
+ theme <- theme_classic() +
+          theme(legend.position = "none",
+          legend.text = element_text(size = 15),
+          plot.margin = unit(c(1,0.2,0.2,1), "cm"),
+          axis.text.x = element_text(size = 14, color = "black", face= "italic", angle = 45, hjust= 1),
+          axis.title.x=element_blank(),
+          axis.text.y = element_text(size = 16, vjust = 0.5, color = "black"),
+          axis.title.y =element_text(hjust = 0.5, size=15,face="bold",margin=margin(0,12,0,0)))
+
+
+# species graphs
+n <- ggplot(single, aes(x = species, y = net_photo_h_surface, fill = family)) +
+  geom_boxplot(lwd=1, outlier.shape = NA) +
+  geom_jitter(size=0.6, width=0.2)+
+  ylab(expression(bold(atop("Net photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  scale_fill_manual(values = c("Acroporidae"="#00b886","Pocilloporidae"= "#Cd8d00","Poritidae"= "#0072B2"))+
+  scale_x_discrete("family", labels = c("Acy"="Acropora cytherea", "Amu"="Acropora muricata", "Mdi"="Montipora digitata",
+                           "Pve"="Pocillopora verrucosa", "Pda"="Pocillopora damicornis", "Spi"="Stylophora pistillata",
+                            "Plo"="Porites lobata", "Pcy"="Porites cylindrica", "Pru"="Porites rus"))+
+  scale_y_continuous(limits= c(0,90), n.breaks = 5)+
+  theme
+        
+
+r<-ggplot(single, aes(x = species, y = respiration_h_surface, fill = family)) +
+  geom_boxplot(lwd=1, outlier.shape = NA) +
+ geom_jitter(size=0.6, width=0.2)+
+  ylab(expression(bold(atop("Respiration", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  scale_fill_manual(values = c("Acroporidae"="#00b886","Pocilloporidae"= "#Cd8d00","Poritidae"= "#0072B2"))+
+  scale_x_discrete("family", labels = c("Acy"="Acropora cytherea", "Amu"="Acropora muricata", "Mdi"="Montipora digitata",
+                            "Pve"="Pocillopora verrucosa", "Pda"="Pocillopora damicornis", "Spi"="Stylophora pistillata",
+                            "Plo"="Porites lobata", "Pcy"="Porites cylindrica", "Pru"="Porites rus"))+
+  scale_y_continuous(limits= c(0, 90), n.breaks = 5)+
+  theme
+
+g<-ggplot(single, aes(x = species, y = gross_photo_h_surface, fill = family)) +
+  geom_boxplot(lwd=1, outlier.shape = NA) +
+ geom_jitter(size=0.6, width=0.2)+
+  ylab(expression(bold(atop("Gross photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
+  scale_fill_manual(values = c("Acroporidae"="#00b886","Pocilloporidae"= "#Cd8d00","Poritidae"= "#0072B2"))+
+  scale_x_discrete("family", labels = c("Acy"="Acropora cytherea", "Amu"="Acropora muricata", "Mdi"="Montipora digitata",
+                            "Pve"="Pocillopora verrucosa", "Pda"="Pocillopora damicornis", "Spi"="Stylophora pistillata",
+                            "Plo"="Porites lobata", "Pcy"="Porites cylindrica", "Pru"="Porites rus"))+
+  scale_y_continuous(limits= c(0,190), n.breaks = 7)+
+  theme
+
+
+c <- ggplot(single_c, aes(x = species, y =  calc_umol_cm2_h, fill = family)) +
+  geom_boxplot(lwd=1, outlier.shape = NA) +
+ geom_jitter(size=0.6, width=0.2)+
+  ylab(expression(bold(atop("Calcification", paste("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
+  scale_fill_manual(values = c("Acroporidae"="#00b886","Pocilloporidae"= "#Cd8d00","Poritidae"= "#0072B2"))+
+  scale_x_discrete("family", labels = c("Acy"="Acropora cytherea", "Amu"="Acropora muricata", "Mdi"="Montipora digitata",
+                            "Pve"="Pocillopora verrucosa", "Pda"="Pocillopora damicornis", "Spi"="Stylophora pistillata",
+                            "Plo"="Porites lobata", "Pcy"="Porites cylindrica", "Pru"="Porites rus"))+
+  scale_y_continuous(limits= c(-0.5,3.5), n.breaks = 6)+
+  theme
+
+
+# family graphs
+# set order of families
+single$family <- factor(single$family, levels= c("Poritidae", "Acroporidae", "Pocilloporidae"))
+single_c$family <- factor(single_c$family, levels= c("Poritidae", "Acroporidae", "Pocilloporidae"))
+
+
+# Net Photosynthesis
+n_fam <- ggboxplot(single, x = "family", y = "net_photo_h_surface", fill = "family", outlier.size = 0.7) +
+  scale_fill_manual(values = c("Acroporidae"="#00b886","Pocilloporidae"= "#Cd8d00","Poritidae"= "#0072B2"))+
+  scale_y_continuous(limits= c(0, 69),n.breaks = 4)+
+   geom_bracket(
+        xmin=c("Poritidae"), xmax=c("Pocilloporidae"),
+        y.position = 62,
+        step.increase = 0.15,
+        label = c("*"),
+        label.size = 6
+          )+
+  theme_classic() +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 14, vjust = 0.5, color = "black"),
+        axis.title.y =element_blank(),
+        axis.title.x=element_blank(),
+        legend.position = "bottom",
+        legend.text = element_text(size = 18),
+        legend.key.size = unit(1, "cm"),
+        legend.title = element_blank(),
+        axis.ticks.x=element_blank())
+
+# Respiration
+r_fam <- ggboxplot(single, x = "family", y = "respiration_h_surface", fill= "family", outlier.size = 0.7) +
+  scale_fill_manual(values = c("Acroporidae"="#00b886","Pocilloporidae"= "#Cd8d00","Poritidae"= "#0072B2"))+
+  scale_y_continuous(limits= c(0, 70),n.breaks = 4)+
+  theme_classic() +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 14, vjust = 0.5, color = "black"),
+        axis.title.y =element_blank(),
+        axis.title.x=element_blank(),
+        legend.position = "none",
+        axis.ticks.x=element_blank())+
+        geom_bracket(
+        xmin=c("Acroporidae", "Poritidae"), xmax=c("Pocilloporidae", "Pocilloporidae"),
+        y.position = 51,
+        step.increase = 0.24,
+        label = c("***", "***"),
+        label.size = 6
+        )
+    
+# Gross Photosynthesis
+g_fam <- ggboxplot(single, x = "family", y = "gross_photo_h_surface", fill= "family", outlier.size = 0.7) +
+  scale_fill_manual(values = c("Acroporidae"="#00b886","Pocilloporidae"= "#Cd8d00","Poritidae"= "#0072B2"))+
+  scale_y_continuous(limits= c(0, 128), breaks = seq(0,100, by=50))+
+  theme_classic() +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 14, vjust = 0.5, color = "black"),
+        axis.title.y =element_blank(),
+        axis.title.x=element_blank(),
+        legend.position = "none",
+        axis.ticks.x=element_blank())+
+        geom_bracket(
+        xmin=c("Acroporidae", "Poritidae"), xmax=c("Pocilloporidae", "Pocilloporidae"),
+        y.position = 92,
+        step.increase = 0.25,
+        label = c("**", "***"),
+        label.size = 6
+        )
+
+
+# Calcification
+c_fam <- ggboxplot(single_c, x = "family",  y = "calc_umol_cm2_h", fill= "family", outlier.size = 0.7) +
+  scale_fill_manual(values = c("Acroporidae"="#00b886","Pocilloporidae"= "#Cd8d00","Poritidae"= "#0072B2"))+
+  scale_y_continuous(limits= c(-0.4, 3.2))+
+  theme_classic() +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 14, vjust = 0.5, color = "black"),
+        axis.title.y =element_blank(),
+        axis.title.x=element_blank(),
+        legend.position = "none",
+        axis.ticks.x=element_blank())+
+        geom_bracket(
+        xmin=c("Acroporidae", "Poritidae"), xmax=c("Pocilloporidae", "Pocilloporidae"),
+        y.position = 2.2,
+        step.increase = 0.24,
+        label = c("***", "***"),
+        label.size = 6
+        )
+
+#arrange all plots together
+arranged <- ggarrange(
+                      n + patchwork::inset_element(n_fam, left = 0.5, bottom = 0.55, right = 1, top = 1),
+                      r + patchwork::inset_element(r_fam, left = 0.5, bottom = 0.55, right = 1, top = 1),
+                      g + patchwork::inset_element(g_fam, left = 0.5, bottom = 0.55, right = 1, top = 1),
+                      c + patchwork::inset_element(c_fam, left = 0.5, bottom = 0.55, right = 1, top = 1),
+          labels = c("a)", "b)", "c)", "d)"),
+          label.x = 0.05,
+          label.y = 0.89,
+          font.label = list(size=18),
+          common.legend = TRUE,
+          legend = "bottom",
+          ncol = 2, nrow =2, 
+          hjust = -0.5,
+          vjust = 0,
+          align = "v") 
+
+ggsave("Graphs/measured_orderfamily.png", width=12, height= 12, limitsize=FALSE, dpi= 700, arranged)
+```
+
+
+---------- summary statistics ----------
+```{r include=FALSE}
+descriptive_o <- single %>%  group_by(species) %>%
+    summarise(
+      mean_net = round(mean(net_photo_h_surface),4),                                                    
+      sd_net = round(sd(net_photo_h_surface),4),
+      mean_resp = round(mean(respiration_h_surface),4),
+      sd_resp = round(sd(respiration_h_surface),4),
+      mean_gross = round(mean(gross_photo_h_surface),4),
+      sd_gross = round(sd(gross_photo_h_surface),4))
+
+descriptive_c <- single_c %>%  group_by(species) %>%
+    summarise(
+      mean_calc = round(mean(calc_umol_cm2_h),4),
+      sd_calc = round(sd(calc_umol_cm2_h),4))
+
+descriptive <- left_join(descriptive_o, descriptive_c)
+
+write.table(descriptive, file = "Graphs/descriptive_monoculture.csv", sep = ",")
+```
+
+
+---------- size differences between species ---------- 
+```{r}
+# get each fragment only ones
+size <- single %>% distinct(fragment_ID, sum_surface_cm2, species )
+
+# descriptive
+descriptive_size <- size %>%  group_by(species) %>%
+                    summarise(
+                    surface = round(mean(sum_surface_cm2),1),                                                    
+                    sd_surface = round(sd(sum_surface_cm2),1))
+
+
+# significant different?
+mod_frag_size <- lm(sum_surface_cm2 ~ species, data=size)
+summary(mod_frag_size)
+
+emmeans(mod_frag_size, pairwise~species)
+```

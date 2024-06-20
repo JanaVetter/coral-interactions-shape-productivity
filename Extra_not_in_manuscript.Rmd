@@ -1,0 +1,633 @@
+
+---------- load packages ----------
+```{r include=FALSE}
+library(tidyverse)
+library(nlme)
+library(rstatix)
+library(ggpubr)
+```
+
+
+---------- load data, split in O2 data and calcification data & exclude outliers after visual inspection of obs-expected percentages ----------
+```{r}
+#outlier exlusion in conspecific incubations
+
+#O2 meausrements
+Data <- read.csv("Data/All_expectedvalues.csv")
+
+Day14 <- Data %>% filter(day =="14")
+Day14<- Day14 %>%
+  filter(fragment_ID != "AmuD1_AmuB2_AmuA3" & fragment_ID != "SpiA4_SpiB1_SpiD2")
+
+Day5 <- Data %>% filter(day =="5")
+Day5<- Day5 %>%
+  filter(fragment_ID != "PloB3_PloC3_PloD3")
+
+Data_sub <- Data %>% filter(day != "14" & day != "5")
+
+Data <- rbind(Day14, Day5, Data_sub)
+
+# calcification measurements
+# important to delete minus values in expected calc, otherwise relative difference in percentage is wrong
+Data_calc <- read.csv("Data/All_expectedvalues.csv")
+
+Day14_calc <- Data_calc %>% filter(day =="14")
+Day14_calc<- Day14_calc %>%
+  filter(fragment_ID != "AmuD2_AmuB4_AmuA1" & fragment_ID != "AmuD1_AmuB2_AmuA3" & fragment_ID != "AcyB1_AcyD2_AcyA3" & fragment_ID != "PruD4_PruE2_PruA3" & fragment_ID != "PdaA1_PdaB2_PdaD4" & fragment_ID != "AcyB3_AcyD3_AcyA1")
+
+Day5 <- Data %>% filter(day =="5")
+Day5_calc<- Day5 %>%
+  filter(fragment_ID != "AcyB1_AcyD1_AcyA1")
+
+Day6_calc <- Data_calc %>%  filter(day == "6")
+Day6_calc <- Day6_calc %>%  filter(fragment_ID != "PloB3_PcyB4_PruD4")
+
+Data_sub_calc <- Data %>% filter(day != "14" & day != "5"& day != "6")
+
+Data_calc <- rbind(Day6_calc, Day14_calc, Day5_calc, Data_sub_calc)
+
+rm(Data_sub, Data_sub_calc)
+```
+
+```{r}
+#outlier exclusion in diversity incubations
+
+#O2 measurements
+Day13 <- Data %>% filter(day =="13")
+Day13<- Day13 %>% filter(fragment_ID != "SpiB2_AcyD2_PcyC3" )
+
+Day9 <- Data %>% filter(day =="9")
+Day9<- Day9 %>% filter(fragment_ID != "PdaA2_AmuD2_PruD3" & fragment_ID != "PveF1_MdiC1_PcyB1")
+
+Day7 <- Data %>% filter(day =="7")
+Day7<- Day7 %>% filter(fragment_ID != "PdaB4_AcyD3_PcyC4")
+
+Data_sub <- Data %>% filter(day != "13" & day != "9" & day != "7")
+
+Data <- rbind(Day13, Day9, Day7, Data_sub)
+
+# calcification measurements
+Day7_calc <- Data_calc %>% filter(day =="7")
+Day7_calc<- Day7_calc %>%filter(fragment_ID != "PdaD1_AcyA1_PcyA1")
+
+Day13_calc <- Data_calc %>% filter(day =="13")
+Day13_calc<- Day13_calc %>%filter(fragment_ID != "PdaD1_AmuA1_PloD1")
+
+Data_sub_calc <- Data_calc %>%  filter(day != "7" & day != "13")
+
+Data_calc <- rbind(Day7_calc, Day13_calc, Data_sub_calc)
+```
+
+
+---------- calculate difference between observed/measured and expected values and normalize to % ----------
+This is percentage error, which is the difference between an experimental and theoretical value, divided by the theoretical value, multiplied by 100 to give a percent.
+```{r}
+#((100/ exp)* net_obs) -100, rewritten it is ((net_obs/exp)*100)-100, is the same as ((net_obs/exp)-1)*100
+
+Data$exp_obs_net_photo <- with(Data, Data$net_photo_h_surface - Data$exp_Net_photo_ug_h_cm2)
+Data$exp_obs_net_photo_perc <- with(Data, ((100 / Data$exp_Net_photo_ug_h_cm2) * Data$net_photo_h_surface)-100)
+Data$exp_obs_net_photo_perc <- round(Data$exp_obs_net_photo_perc, 6)
+
+Data$exp_obs_gross_photo <- with(Data, Data$gross_photo_h_surface - Data$exp_Gross_photo_ug_h_cm2)
+Data$exp_obs_gross_photo_perc <- with(Data, ((100 / Data$exp_Gross_photo_ug_h_cm2) * Data$gross_photo_h_surface)-100)
+Data$exp_obs_gross_photo_perc <- round(Data$exp_obs_gross_photo_perc, 6)
+
+Data$exp_obs_respiration <- with(Data, Data$respiration_h_surface - Data$exp_Resp_ug_h_cm2)
+Data$exp_obs_respiration_perc <- with(Data, ((100 / Data$exp_Resp_ug_h_cm2) * Data$respiration_h_surface)-100)
+Data$exp_obs_respiration_perc <- round(Data$exp_obs_respiration_perc, 6)
+
+Data_calc$exp_obs_calc <- with(Data_calc, Data_calc$calc_umol_cm2_h - Data_calc$exp_Calc_umol_h_cm2)
+Data_calc$exp_obs_calc_perc <- with(Data_calc, ((100 / Data_calc$exp_Calc_umol_h_cm2) * Data_calc$calc_umol_cm2_h)-100)
+Data_calc$exp_obs_calc_perc <- round(Data_calc$exp_obs_calc_perc, 6)
+```
+
+
+---------- Splitting dataframe in useful groups ----------
+```{r}
+min_single_t <- Data %>%  filter(category != "single")
+min_single_tc <- Data_calc %>%  filter(category != "single")
+biomass_t <- Data %>%  filter(category == "biomass")
+conspecific_t <- Data %>%  filter(category == "conspecific")
+family_t <- Data %>%  filter(category == "family")
+mix_t <- Data %>%  filter(category == "mix")
+mix_tc <- Data_calc %>%  filter(category == "mix")
+```
+
+
+#!!!NOTE: Carefull with these graphs as DO start/end values, as well as surface area values and productivity parameters are mathematically coupled. Hence graphs can give an overview, yet can not be interpeted directly.
+
+---------- light incubation start values relationship to change in productivity parameters ----------
+```{r}
+# monoculture
+c1 <-ggplot(min_single_t, aes(x = O2_start_L, y = exp_obs_net_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("All Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start value"))) +
+  ylab(expression(paste("Observed - expected net photo"))) +
+  theme_classic()
+
+c1a <-ggplot(min_single_t, aes(x = O2_start_L, y = exp_obs_gross_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("All Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start value"))) +
+  ylab(expression(paste("Observed - expected gross photo"))) +
+  theme_classic()
+
+c2 <-ggplot(min_single_t, aes(x = O2_end_L, y = exp_obs_respiration)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("All Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 end value"))) +
+  ylab(expression(paste("Observed - expected resp"))) +
+  theme_classic()
+
+c2a <-ggplot(min_single_t, aes(x = O2_end_L, y = exp_obs_gross_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("All Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 end value"))) +
+  ylab(expression(paste("Observed - expected gross photo"))) +
+  theme_classic()
+
+c2b <-ggplot(min_single_tc, aes(x = TA_umolL_con, y = exp_obs_calc)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("All Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("TA"))) +
+  ylab(expression(paste("Observed - expected calc"))) +
+  theme_classic()
+
+# diversity incubations
+c3 <-ggplot(mix_t, aes(x = O2_start_L, y = exp_obs_net_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start value"))) +
+  ylab(expression(paste("Observed - expected net photo"))) +
+  theme_classic()
+
+c4 <-ggplot(mix_t, aes(x = O2_end_L, y = exp_obs_net_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  ggtitle("Mixed Incubation") +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 end value"))) +
+  ylab(expression(paste("Observed - expected net photo"))) +
+  theme_classic()
+
+# family incubations
+c5 <-ggplot(family_t, aes(x = O2_start_L, y = exp_obs_net_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Family Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start value"))) +
+  ylab(expression(paste("Observed - expected net photo"))) +
+  theme_classic()
+
+c6 <-ggplot(family_t, aes(x = O2_end_L, y = exp_obs_net_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point() +
+  ggtitle("Family Incubation") +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 end value"))) +
+  ylab(expression(paste("Observed - expected net photo"))) +
+  theme_classic()
+
+# biomass incubations
+c7 <-ggplot(biomass_t, aes(x = O2_start_L, y = exp_obs_net_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Biomass Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start value"))) +
+  ylab(expression(paste("Observed - expected net photo"))) +
+  theme_classic()
+
+
+c8 <-ggplot(biomass_t, aes(x = O2_end_L, y = exp_obs_net_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point() +
+  ggtitle("Biomass Incubation") +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 end value"))) +
+  ylab(expression(paste("Observed - expected net photo"))) +
+  theme_classic()
+
+# conspecific incubations
+c9 <-ggplot(conspecific_t, aes(x = O2_start_L, y = exp_obs_net_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Conspecific Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start value"))) +
+  ylab(expression(paste("Observed - expected net photo"))) +
+  theme_classic()
+
+c10 <-ggplot(conspecific_t, aes(x = O2_end_L, y = exp_obs_net_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point() +
+  ggtitle("Conspecific Incubation") +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 end value"))) +
+  ylab(expression(paste("Observed - expected net photo"))) +
+  theme_classic()
+
+# combine all
+arranged <- ggarrange(
+                     c1,c2,c1a,c2a,c3,c4,c5,c6,c7,c8,c9,c10,c2b,
+          label.x = 0,
+          label.y = 0.95,
+          common.legend = FALSE,
+          ncol = 2, nrow =7, 
+          hjust = -0.5,
+          vjust = 0) +
+          theme(legend.text = element_text(size = 40))
+
+ggsave("Graphs/sanity_check.png", width=11, height= 15, limitsize=FALSE, dpi= 700, arranged)
+```
+
+
+---------- light and dark incubation start and end values relationship to productivity parameters ----------
+```{r}
+# diversity incubations
+m1 <-ggplot(mix_t, aes(x = O2_start_L, y = net_photo_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start values light" ))) +
+   ylab(expression(paste("Measured net photosynthesis (μg O "[2]," cm" ^-2," h" ^-1,")")))+
+   theme_classic()
+
+m2 <-ggplot(mix_t, aes(x = O2_end_L, y = net_photo_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 end values light"))) +
+   ylab(expression(paste("Measured net photosynthesis (μg O "[2]," cm" ^-2," h" ^-1,")")))+
+   theme_classic()
+
+m3 <-ggplot(mix_t, aes(x = O2_start_D, y = respiration_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start values dark"))) +
+   ylab(expression(paste("Measured respiration (μg O "[2]," cm" ^-2," h" ^-1,")")))+
+   theme_classic()
+
+m4 <-ggplot(mix_t, aes(x = O2_end_D, y = respiration_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 end values dark"))) +
+   ylab(expression(paste("Measured respiration (μg O "[2]," cm" ^-2," h" ^-1,")")))+
+   theme_classic()
+
+m5 <-ggplot(mix_t, aes(x = O2_start_L, y = gross_photo_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start values light"))) +
+   ylab(expression(paste("Measured gross photosynthesis (μg O "[2]," cm" ^-2," h" ^-1,")")))+
+   theme_classic()
+
+m6 <-ggplot(mix_t, aes(x = O2_end_L, y = gross_photo_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 end values light"))) +
+   ylab(expression(paste("Measured gross photosynthesis (μg O "[2]," cm" ^-2," h" ^-1,")")))+
+   theme_classic()
+
+m7 <-ggplot(mix_t, aes(x = O2_start_D, y = gross_photo_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("O2 start values dark"))) +
+   ylab(expression(paste("Measured gross photosynthesis (μg O "[2]," cm" ^-2," h" ^-1,")")))+
+   theme_classic()
+
+m8 <-ggplot(mix_t, aes(x = O2_end_D, y = gross_photo_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   xlab(expression(paste("O2 end values dark"))) +
+   ylab(expression(paste("Measured gross photosynthesis (μg O "[2]," cm" ^-2," h" ^-1,")")))+
+   theme_classic()
+
+m9 <-ggplot(mix_tc, aes(x = TA_umolL_con, y = calc_umol_cm2_h)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+  xlab(expression(paste("TA umol/L"))) +
+   ylab(expression(paste("Measured calcification (μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))) +
+   theme_classic()
+
+arranged <- ggarrange(
+                     m1, m2, m3, m4, m5, m6, m7, m8,m9,
+          label.x = 0,
+          label.y = 0.95,
+          common.legend = FALSE,
+          ncol = 2, nrow =5, 
+          hjust = -0.5,
+          vjust = 0) +
+          theme(legend.text = element_text(size = 40))
+
+ggsave("Graphs/sanity_check_measured_mix.png", width=11, height= 15, limitsize=FALSE, dpi= 700, arranged)
+```
+
+
+---------- light and dark incubation start and end values relationship to change in  productivity parameters ----------
+```{r}
+# diversity incubations
+e1 <-ggplot(mix_t, aes(x = O2_start_L, y = exp_obs_net_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+e2 <-ggplot(mix_t, aes(x = O2_end_L, y = exp_obs_net_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+e3 <-ggplot(mix_t, aes(x = O2_start_D, y = exp_obs_respiration)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+e4 <-ggplot(mix_t, aes(x = O2_end_D, y = exp_obs_respiration)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+e5 <-ggplot(mix_t, aes(x = O2_start_L, y = exp_obs_gross_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+e6 <-ggplot(mix_t, aes(x = O2_end_L, y = exp_obs_gross_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+e7 <-ggplot(mix_t, aes(x = O2_start_D, y = exp_obs_gross_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+e8 <-ggplot(mix_t, aes(x = O2_end_D, y = exp_obs_gross_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+e9 <-ggplot(mix_tc, aes(x = TA_umolL_con, y = exp_obs_calc)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+arranged <- ggarrange(
+                     e1, e2, e3, e4, e5, e6, e7, e8,e9,
+          label.x = 0,
+          label.y = 0.95,
+          common.legend = FALSE,
+          ncol = 2, nrow =5, 
+          hjust = -0.5,
+          vjust = 0) +
+          theme(legend.text = element_text(size = 40))
+
+ggsave("Graphs/sanity_check_change_mix.png", width=11, height= 15, limitsize=FALSE, dpi= 700, arranged)
+```
+
+
+---------- surface area relationship to productivity parameters ----------
+```{r}
+# diversity incubations
+s1 <-ggplot(mix_t, aes(x = sum_surface_cm2, y = net_photo_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+s2 <-ggplot(mix_t, aes(x = sum_surface_cm2, y = respiration_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+s3 <-ggplot(mix_t, aes(x = sum_surface_cm2, y = gross_photo_h_surface)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+s4 <-ggplot(mix_t, aes(x = sum_surface_cm2, y = calc_umol_cm2_h)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+s5 <-ggplot(mix_t, aes(x = sum_surface_cm2, y = net_photo_ug_h)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+s6 <-ggplot(mix_t, aes(x = sum_surface_cm2, y = respiration_ug_h)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+s7 <-ggplot(mix_t, aes(x = sum_surface_cm2, y = gross_photo_ug_h)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+s8 <-ggplot(mix_tc, aes(x = sum_surface_cm2, y = Calc_umol_h)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+arranged <- ggarrange(
+                     s1, s2, s3, s4,s5, s6, s7, s8,
+          label.x = 0,
+          label.y = 0.95,
+          common.legend = FALSE,
+          ncol = 2, nrow =4, 
+          hjust = -0.5,
+          vjust = 0) +
+          theme(legend.text = element_text(size = 40))
+
+ggsave("Graphs/sanity_check_surface_meas_mix.png", width=11, height= 15, limitsize=FALSE, dpi= 700, arranged)
+```
+
+
+---------- surface area relationship to change in productivity parameters ----------
+```{r}
+# diversity incubations
+se1 <-ggplot(mix_t, aes(x = sum_surface_cm2, y = exp_obs_net_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+se2 <-ggplot(mix_t, aes(x = sum_surface_cm2, y = exp_obs_respiration)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+se3 <-ggplot(mix_t, aes(x = sum_surface_cm2, y = exp_obs_gross_photo)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+se4 <-ggplot(mix_tc, aes(x = sum_surface_cm2, y = exp_obs_calc)) +
+  geom_smooth(method=lm, color = "black") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  ggtitle("Mixed Incubation") +
+  labs(color = "Productivity score") +
+   theme_classic()
+
+
+arranged <- ggarrange(
+                     se1, se2, se3, se4,
+          label.x = 0,
+          label.y = 0.95,
+          common.legend = FALSE,
+          ncol = 2, nrow =2, 
+          hjust = -0.5,
+          vjust = 0) +
+          theme(legend.text = element_text(size = 40))
+
+ggsave("Graphs/sanity_check_surface_change_mix.png", width=11, height= 15, limitsize=FALSE, dpi= 700, arranged)
+```

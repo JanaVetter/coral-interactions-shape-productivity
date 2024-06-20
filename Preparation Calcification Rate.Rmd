@@ -1,0 +1,401 @@
+
+---------- load packages ----------
+```{r, include = FALSE}
+library(tidyverse)
+library(lubridate)
+library(ggpubr)
+library(rstatix)
+```
+
+---------- read data and set properties ----------
+```{r include = FALSE}
+# Total Alkalinity Data
+TA <- read_csv("Data/TA_Results_AllDays.csv") %>% 
+        mutate(run= as.factor(run)) %>% 
+        mutate(day = as.factor(day)) %>% 
+        mutate(TA_umolL = TA_mmolL*1000)
+
+# O2 data to get start and end time of incubations
+O2_Data <- read_csv("Data/Raw/lazy_coral_O2_ALL.csv") %>% 
+            mutate(time_start_L = hms(time_start_L)) %>% 
+            mutate(time_end_L = hms(time_end_L)) %>% 
+            mutate(time_start_L_cont = hms(time_start_L_cont)) %>% 
+            mutate(time_end_L_cont = hms(time_end_L_cont)) %>% 
+            mutate(date = mdy(date)) %>% 
+            mutate(run = as.factor(run)) %>% 
+            mutate(day = as.factor(day))
+
+# make Data handling easier and make sure O2 and alkalinity data have the same column names
+# change separator of fragment_ID so it fits with Alkalinity data
+O2_Data$fragment_ID <- gsub("-","",O2_Data$fragment_ID)
+O2_Data$fragment_ID <- gsub("\\|","_",O2_Data$fragment_ID)
+
+# remove white space from some of the fragment_ID names
+O2_Data$fragment_ID <- gsub(" ","",O2_Data$fragment_ID)
+
+# fill empty rows with NA (no missing values)
+O2_Data[O2_Data == ""] <- NA
+sum(is.na(O2_Data))
+```
+
+```{r}
+# Get category & species column in TA table
+
+# species column
+TA$species <- TA$fragment_ID %>% gsub("A1", "", .) %>% gsub("A2", "", .) %>% gsub("A3", "",.)%>% gsub("A4", "",.)%>% gsub("B1", "", .) %>% gsub("B2", "", .) %>% gsub("B3", "", .)%>% gsub("B4", "",.)%>% gsub("C1", "", .) %>% gsub("C2", "", .) %>% gsub("C3", "", .) %>% gsub("C4", "",.) %>% gsub("D1", "", .) %>% gsub("D2", "", .) %>% gsub("D3", "", .) %>% gsub("D4", "",.) %>% gsub("E1", "", .) %>% gsub("E2", "", .) %>% gsub("E3", "", .) %>% gsub("E4", "",.) %>% gsub("F1", "", .) %>% gsub("F2", "", .) %>% gsub("F3", "", .) %>% gsub("F4", "",.)
+
+# certain incubation types only took place on specific days
+Single <- filter(TA, day %in% c("1", "2", "3", "10", "11", "12", "15", "16", "17"))
+Single$category <- "single"
+
+Biomass <- filter(TA, day == "4")
+Biomass$category <- "biomass"
+
+Conspe <- filter(TA, day %in% c("5", "14"))
+Conspe$category <- "conspecific"
+
+Family <- filter(TA, day == "6")
+Family$category <- "family"
+
+Mix <- filter(TA, day %in% c("7", "8", "9", "13"))
+Mix$category <- "mix"
+
+TA_cat <- rbind(Single, Biomass, Conspe, Family, Mix)
+```
+
+
+---------- get the incubation times ----------
+```{r}
+# select necessary columns and use only the times from the light incubations, as TA was only meausured during the light incubations
+Ta_time <- O2_Data %>%  dplyr::select(c( "date", "day", "run", "fragment_ID", "time_start_L", "time_end_L"))
+
+# drop controls from TA as Ta_time does not have them in this manner
+TA_frag <- TA_cat %>% filter(fragment_ID != "control")
+
+TA_com <- left_join(TA_frag, Ta_time, by = c("day", "run", "fragment_ID"))
+
+# now get control times extra to add to TA_time
+TA_control <- TA_cat %>%  filter(fragment_ID == "control")
+
+Ta_time_cont <- O2_Data %>%
+              dplyr::select(c( "date", "day", "run", "fragment_ID", "time_start_L_cont", "time_end_L_cont")) %>% 
+              mutate(fragment_ID = "control") %>% 
+              distinct() %>% 
+              rename(time_start_L = time_start_L_cont) %>% 
+              rename(time_end_L = time_end_L_cont) 
+  
+TA_cont <- left_join(TA_control, Ta_time_cont, by = c("day", "run", "fragment_ID"))
+```
+
+```{r}
+# Check for TA outliers and compare values with the Titration Error List, before combining TA_com and TA_cont
+ggplot(TA_cont, aes(x= day, y= TA_mmolL, colour = run))+
+     geom_point()
+
+# per incubation type
+ggplot(Single, aes(x= species, y= TA_mmolL, colour=day))+
+ geom_point()
+
+ggplot(Biomass, aes(x= species, y= TA_mmolL, colour=run))+
+ geom_point()
+
+ggplot(Conspe, aes(x= species, y= TA_mmolL, colour=run))+
+  geom_point()
+
+ggplot(Family, aes(x= species, y= TA_mmolL, colour=run))+
+  geom_point()
+
+ggplot(Mix, aes(x= species, y= TA_mmolL, colour=day))+
+  geom_point()
+
+# all look fine, combine controls and fragment incubations
+TA_cont <- TA_cont %>%
+  mutate(TA_umolL_con = TA_umolL) %>% 
+  dplyr::select(date, day, run, TA_umolL_con)
+  
+TA_comp <- full_join(TA_com, TA_cont, by= c("day", "date", "run"))
+
+# delete unnecessary tables
+rm(Ta_time, TA_frag, TA_control, Ta_time_cont, TA_cat, TA, Biomass, Conspe, Family, Mix, Single,TA_com, TA_cont)
+```
+
+
+---------- Calculate G (Calcification) ----------
+Use Calcification Formula for G (calcification rate =  dif TA/2(umol/l) * incubation volumn(L)/ Zeit(h) * surface corals(cm^2))
+(seawaterdensity is already part of TA calculations, therefore not necessary in calcification formula here)
+
+```{r}
+# Calculate Incubation times
+TA_comp$time_L_h <- time_length(TA_comp$time_end_L- TA_comp$time_start_L, unit = "hour") # time outliers already checked in 'Preparation Oxygen Measurements' script
+
+#use formula 
+TA_comp <- TA_comp %>%
+  mutate(Calc_umol_h = (((TA_umolL_con - TA_umolL)/2) * 1.00036) / time_L_h) # mean incubation volume (1.00036) is used
+# we use Controls as Start water, real start water was not measured. Yet, we double checked in pilot study and start and control are very similar (-4 until +4 umol/h in controls)
+```
+
+```{r}
+# get errormargin controls
+TA_comp %>% group_by(day) %>% summarise(mean_con= mean(TA_umolL_con),
+                                        mean_sd= sd(TA_umolL_con))
+
+# calculate average difference in % per day controls
+TA_con_check <- TA_comp %>%
+  dplyr::select(day,run,TA_umolL_con) %>%
+  unique()
+
+TA_con_check <-TA_con_check %>% group_by(day) %>%  arrange(run, .by_group = TRUE) %>%
+  mutate(pct_change = (TA_umolL_con/lag(TA_umolL_con) - 1) * 100)
+
+TA_con_check %>% 
+  drop_na() %>% 
+  ungroup() %>% 
+  summarise(min=min(pct_change),
+            max=max(pct_change),
+            mean=mean(pct_change))
+```
+
+
+---------- normalize with Surface area ----------
+```{r include =FALSE}
+# Add surface and volume; normalize to surface area
+mass_all <- read_csv("Data/Raw/lazy_coral_fragment_surface-volume.csv")
+mass_all$fragment_ID <- gsub("-","",mass_all$fragment_ID)
+str(mass_all)
+surface <- mass_all %>%  dplyr::select(fragment_ID, surface_mm2)
+volume <- mass_all %>%  dplyr::select(fragment_ID, volume_cm3)
+
+# get combination
+combi <- TA_comp %>%  dplyr::select(fragment_ID)
+# delete double fragment_IDs
+combi <- distinct(combi, fragment_ID)
+
+#surface
+for(i in 1:nrow(combi)){
+  Target <- strsplit(as.character(combi$fragment_ID[i]),"_")[[1]]
+  combi$sum_surface_mm[i] <- sum(surface[surface$fragment_ID %in% Target, "surface_mm2"])
+}
+# get cm2
+combi$sum_surface_cm2 <- (combi$sum_surface_mm / 100)
+
+# drop sum_surface_mm
+combi <- dplyr::select(combi, -sum_surface_mm)
+
+#volume
+for(i in 1:nrow(combi)){
+  Target <- strsplit(as.character(combi$fragment_ID[i]),"_")[[1]]
+  combi$sum_volume_cm3[i] <- sum(volume[volume$fragment_ID %in% Target, "volume_cm3"])
+}
+
+Data_all <- left_join(TA_comp, combi, by = c("fragment_ID" = "fragment_ID")) 
+
+#normalize with Surface area
+Data_all$calc_umol_cm2_h <- round(Data_all$Calc_umol_h / Data_all$sum_surface_cm2, 5)
+rm(mass_all)
+
+# remove unnecessary objects
+rm(i, Target, combi, surface, volume)
+```
+
+
+---------- check for outliers ----------
+```{r}
+# Check Calcification values
+ggplot(Data_all, aes(x= category, y= Calc_umol_h, colour=day))+
+  geom_point()
+
+ggplot(Data_all, aes(x= category, y= calc_umol_cm2_h, colour=species))+
+  geom_point()
+```
+
+```{r}
+# remove outliers
+Data_all <- Data_all %>% 
+  filter(Filename != "Alkalinity_preT7_5_12_08_19_13_40_12") %>% # MdiA3 day 17 was a outlier in TA data already
+  filter(Filename != "Alkalinity_preT7_5_10_08_19_11_59_42") %>% #AcyD1 day 16
+  filter(Filename != "Alkalinity_preT7_5_10_08_19_11_52_33") #AcyB1 day 16
+
+TA_con <- Data_all %>%  mutate(mean_TA = round(mean(TA_umolL_con),4),
+                               sd_TA= round(sd(TA_umolL_con),4))
+```
+
+---------- combine O2 & calcification data ----------
+```{r include = FALSE}
+# get necessary  calcification columns
+Calc <- Data_all %>%  dplyr::select(Calc_umol_h, calc_umol_cm2_h,sum_surface_cm2, Filename, day, date, run, fragment_ID, species,category, TA_umolL, TA_umolL_con) %>% 
+  mutate(sum_surface_cm2 = round(sum_surface_cm2,4))
+
+#get O2 table
+O2_data <- read_csv("Data/O2_comp.csv")
+O2_data$run <- as.factor(O2_data$run)
+O2_data$day <- as.factor(O2_data$day)
+O2_data$sum_surface_cm2 <- round(O2_data$sum_surface_cm2,4)
+
+#combine tables
+ALL <- full_join( O2_data,Calc, by= c("date", "day", "run", "fragment_ID", "sum_surface_cm2", "category", "species"))
+# drop unnecessary column
+ALL <- dplyr::select(ALL, -"...1")
+
+# add missing family columns for NA rows of O2 data
+All_NA <- ALL %>%  filter(is.na(family))
+All_without <- ALL %>% filter(!is.na(family))
+
+All_NA <- All_NA %>%  mutate(family= case_when(
+  species == "Acy" ~ "Acroporidae",
+  species == "Amu" ~ "Acroporidae",
+  species == "Mdi" ~ "Acroporidae",
+  species == "Pru" ~ "Poritidae",
+  species == "Plo" ~ "Poritidae",
+  species == "Pcy" ~ "Poritidae",
+  species == "Pda" ~ "Pocilloporidae",
+  species == "Pve" ~ "Pocilloporidae",
+  species == "Spi" ~ "Pocilloporidae",
+))
+
+# combine calc and O2 again
+ALL <- rbind(All_without, All_NA)
+```
+
+
+---------- Quality control ---------- 
+```{r}
+# theme for the following graphs
+theme<- theme_classic() +
+        theme(legend.position = "bottom",
+        legend.text = element_text(size = 17),
+        legend.title = element_text(size = 19),
+        plot.margin = unit(c(1,0.2,0.2,1), "cm"),
+        axis.text.x = element_text(size = 18, color = "black"),
+        axis.title.x= element_text(size= 18, face ="bold",margin=margin(12,0,0,0)),
+        axis.text.y = element_text(size = 18, vjust = 0.5, color = "black"),
+        axis.title.y =element_text(hjust = 0.5, size=18,face="bold",margin=margin(0,12,0,0)))
+```
+
+```{r}
+# check correlation TA and calcification
+
+# diversity incubations
+mix <- ALL %>% filter(category=="mix")
+
+ggplot(mix, aes(x = TA_umolL_con, y = calc_umol_cm2_h)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point( size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  stat_cor(method = "pearson", p.accuracy = 0.01, r.accuracy = 0.01, size= 6)+
+   ylab(expression(paste("Measured mix calc")))+
+  theme
+
+# family incubations
+family <- ALL %>% filter(category=="family")
+
+ggplot(family, aes(x = TA_umolL_con, y = calc_umol_cm2_h)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point( size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  stat_cor(method = "pearson", p.accuracy = 0.01, r.accuracy = 0.01, size= 6)+
+   ylab(expression(paste("Measured fam calc")))+
+  theme
+
+# conspecific incubations
+cons <- ALL %>% filter(category=="conspecific")
+
+ggplot(cons, aes(x = TA_umolL_con, y = calc_umol_cm2_h)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point( size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  stat_cor(method = "pearson", p.accuracy = 0.01, r.accuracy = 0.01, size= 6)+
+   ylab(expression(paste("Measured conspecific calc")))+
+  theme
+
+# monoculture incubations
+single <- ALL %>% filter(category=="single")
+
+ggplot(single, aes(x = TA_umolL_con, y = Calc_umol_h)) +
+  geom_smooth(method=lm, color = "black") +
+  geom_point(aes(color= day),size=2.5) +
+  geom_hline(yintercept = 0, linetype = 2, color = "gray86") +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+   ylab(expression(paste("Measured single Calc")))+
+  theme
+```
+
+```{r}
+# Supplementary Figure S2: Pearson correlation between surface area and productivity parameters 
+# Does O2 increase with surface area?
+# Note: Warning removed 22 rows... is because of the NA values in the O2 data for these rows -> is correct
+# Note: Warning removed 5 rows... is because of the NA values in calcification data for these rows -> is correct
+surf <- ALL  %>% filter(category != "biomass")
+
+surf1 <- ggplot(surf, aes(x = sum_surface_cm2, y = net_photo_ug_h, group= category, color = category)) +
+  geom_smooth(method=lm) +
+  geom_point(size=1.0) +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  xlab(expression(paste("Surface area"," [cm" ^2,"]")))+
+  ylab(expression(paste("Measured net photosynthesis (μg O "[2]," h" ^-1,")")))+
+  scale_shape_discrete(name = "Incubations",
+                       labels = c(conspecific = "conspecific", single = "monoculture", family= "family", mix = "diversity"))+
+  guides(color = guide_legend(
+    title = "Incubations",
+    override.aes = aes(label = "")))+
+   theme
+
+surf2 <- ggplot(surf, aes(x = sum_surface_cm2, y = respiration_ug_h, group= category, color= category)) +
+  geom_smooth(method=lm) +
+  geom_point(size=1.0) +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  xlab(expression(paste("Surface area"," [cm" ^2,"]")))+
+  ylab(expression(paste("Measured respiration (μg O "[2]," h" ^-1,")")))+
+  scale_shape_discrete(name = "Incubations",
+                       labels = c(conspecific = "conspecific", single = "monoculture", family= "family", mix = "diversity"))+
+  guides(color = guide_legend(
+    title = "Incubations",
+    override.aes = aes(label = "")))+
+   theme
+
+surf3 <- ggplot(surf, aes(x = sum_surface_cm2, y = gross_photo_ug_h, group= category, color = category)) +
+  geom_smooth(method=lm) +
+  geom_point(size=1.0) +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  xlab(expression(paste("Surface area"," [cm" ^2,"]")))+
+  ylab(expression(paste("Measured gross photosynthesis (μg O "[2]," h" ^-1,")")))+
+  scale_shape_discrete(name = "Incubations",
+                       labels = c(conspecific = "conspecific", single = "monoculture", family= "family", mix = "diversity"))+
+  guides(color = guide_legend(
+    title = "Incubations",
+    override.aes = aes(label = "")))+
+   theme
+
+
+surf4 <- ggplot(surf, aes(x = sum_surface_cm2, y = Calc_umol_h, group= category, color = category)) +
+  geom_smooth(method=lm) +
+  geom_point(size=1.0) +
+  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  xlab(expression(paste("Surface area"," [cm" ^2,"]")))+
+  ylab(expression(paste("Measured calcification (μmol CaCO"[3]," h" ^-1,")")))+
+  scale_shape_discrete(name = "Incubations",
+                       labels = c(conspecific = "conspecific", single = "monoculture", family= "family", mix = "diversity"))+
+  guides(color = guide_legend(
+    title = "Incubations",
+    override.aes = aes(label = "")))+
+   theme
+
+arranged_surf <- ggarrange(
+                      surf1, surf2, surf3, surf4,
+                      labels = c("a)", "b)", "c)", "d)"),
+                      label.x = 0,
+                      label.y = 0.95,
+                      common.legend = TRUE,
+                      legend = "bottom",
+                      ncol = 2, nrow =2, 
+                      hjust = -0.5,
+                      vjust = 0) +
+                      theme(legend.text = element_text(size = 45))
+
+ggsave("Graphs/surfacearea_manuscript.png", width=17, height= 13, limitsize=FALSE, dpi= 700, arranged_surf)
+```
+
+
+---------- save table ----------
+```{r}
+write.csv(ALL, file = "Data/O2_and_Calc_comp.csv")
+```
