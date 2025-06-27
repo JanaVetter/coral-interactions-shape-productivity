@@ -287,8 +287,21 @@ z_blom <- z(corrected_correlation)
  # get corrected slope
  slope_cor_n <- round(corrected_correlation * (sd(mix_net$change) / sd(mix_net$base)),3)
  
+ # calculate standard error of the corrected slope
+n <- length(mix$exp_Net_photo_ug_h_cm2)
+r <- corrected_correlation
 
-#Net original: -0.69, corrected: -0.22 Conf 95%(-0.40 to -0.03), r^2= 0.049 p= 0.02, corrected slope -0.23
+# approximate standard error of r on original scale using Fisher z SE
+se_r <- zse * (1 - r^2)
+
+sd_y <- sd(mix_net$change)
+sd_x <- sd(mix_net$base)
+
+se_slope <- se_r * (sd_y / sd_x)
+se_slope <- round(se_slope, 3)
+ 
+
+#Net original: -0.69, corrected: -0.22 Conf 95%(-0.40 to -0.03), r^2= 0.049 p= 0.02, corrected slope -0.233, se slope 0.099
  
  
 ####################################### Resp
@@ -339,8 +352,21 @@ z_blom <- z(corrected_correlation)
  
   # get corrected slope
  slope_cor_r <- round(corrected_correlation * (sd(mix_res$change) / sd(mix_res$base)),3)
+ 
+  # calculate standard error of the corrected slope
+n <- length(mix$exp_Resp_ug_h_cm2)
+r <- corrected_correlation
 
- #Resp original: -0.62, corrected: -0.29 Conf 95%(-0.46 to -0.11), r2= 0.086, p= 0.002, corrected slope = -0.33 
+# approximate standard error of r on original scale using Fisher z SE
+se_r <- zse * (1 - r^2)
+
+sd_y <- sd(mix_res$change)
+sd_x <- sd(mix_res$base)
+
+se_slope <- se_r * (sd_y / sd_x)
+se_slope <- round(se_slope, 3)
+
+ #Resp original: -0.62, corrected: -0.29 Conf 95%(-0.46 to -0.11), r2= 0.086, p= 0.002, corrected slope = -0.334, se slope 0.104  
  
  
  ################################ Gross
@@ -392,8 +418,23 @@ z_blom <- z(corrected_correlation)
    # get corrected slope
  slope_cor_g <- round(corrected_correlation * (sd(mix_gross$change) / sd(mix_gross$base)),3)
  
+   # calculate standard error of the corrected slope
+n <- length(mix$exp_Gross_photo_ug_h_cm2)
+r <- corrected_correlation
 
-#gross original: -0.56, corrected: -0.34 Conf 95%(-0.5 to -0.16), r2=0.115 p= 0.0004, corrected slope = -0.34
+# approximate standard error of r on original scale using Fisher z SE
+se_r <- zse * (1 - r^2)
+
+sd_y <- sd(mix_gross$change)
+sd_x <- sd(mix_gross$base)
+
+se_slope <- se_r * (sd_y / sd_x)
+se_slope <- round(se_slope, 3)
+ 
+ 
+ 
+
+#gross original: -0.56, corrected: -0.34 Conf 95%(-0.5 to -0.16), r2=0.115 p= 0.0004, corrected slope = -0.343, se slope 0.089
  
  
  ################################ Calc
@@ -444,8 +485,24 @@ z_blom <- z(corrected_correlation)
  
    # get corrected slope
  slope_cor_c <- round(corrected_correlation * (sd(mix_cal$change) / sd(mix_cal$base)),3)
+ 
+    # calculate standard error of the corrected slope
+n <- length(mix$exp_Calc_umol_h_cm2)
+r <- corrected_correlation
 
-#Calc original: -0.43, corrected: 0.12 Conf 95%(-0.07 to 0.31), r2=0.015 p= 0.2 -> non sig., correc6ted slope = 0.13
+# approximate standard error of r on original scale using Fisher z SE
+se_r <- zse * (1 - r^2)
+
+sd_y <- sd(mix_cal$change)
+sd_x <- sd(mix_cal$base)
+
+se_slope <- se_r * (sd_y / sd_x)
+se_slope <- round(se_slope, 3)
+ 
+ 
+ 
+
+#Calc original: -0.43, corrected: 0.12 Conf 95%(-0.07 to 0.31), r2=0.015 p= 0.2 -> non sig., corrected slope = 0.129, se slope 0.102
 ```
 
 
@@ -726,8 +783,21 @@ z_blom <- z(corrected_correlation)
  
   # get corrected slope
  slope_cor_n_con <- round(corrected_correlation * (sd(con_net$change) / sd(con_net$base)),3)
+ 
+ # calculate standard error of the corrected slope
+n <- length(con$exp_Net_photo_ug_h_cm2)
+r <- corrected_correlation
 
-#Net original: -0.73, corrected: -0.65 Conf 95%(-0.79 to -0.46), r2=0.422, p< 0.001, corrected slope = -0.674
+# approximate standard error of r on original scale using Fisher z SE
+se_r <- zse * (1 - r^2)
+
+sd_y <- sd(con_net$change)
+sd_x <- sd(con_net$base)
+
+se_slope <- se_r * (sd_y / sd_x)
+se_slope <- round(se_slope, 3)
+
+#Net original: -0.73, corrected: -0.65 Conf 95%(-0.79 to -0.46), r2=0.422, p< 0.001, corrected slope = -0.674, se slope 0.087
  
  
 ####################################### Resp
@@ -778,9 +848,22 @@ z_blom <- z(corrected_correlation)
  
    # get corrected slope
  slope_cor_r_con <- round(corrected_correlation * (sd(con_res$change) / sd(con_res$base)),3)
+ 
+  # calculate standard error of the corrected slope
+n <- length(con$exp_Resp_ug_h_cm2)
+r <- corrected_correlation
+
+# approximate standard error of r on original scale using Fisher z SE
+se_r <- zse * (1 - r^2)
+
+sd_y <- sd(con_res$change)
+sd_x <- sd(con_res$base)
+
+se_slope <- se_r * (sd_y / sd_x)
+se_slope <- round(se_slope, 3)
 
 
- #Resp original: -0.50, corrected: -0.25 Conf 95%(-0.49 to 0.03), r2=0.063 p= 0.08 -> non sig., corrected slope = -0.259
+ #Resp original: -0.50, corrected: -0.25 Conf 95%(-0.49 to 0.03), r2=0.063 p= 0.08 -> non sig., corrected slope = -0.259, se slope 0.14
  
  
  ################################ Gross
@@ -831,9 +914,22 @@ z_blom <- z(corrected_correlation)
  
    # get corrected slope
  slope_cor_g_con <- round(corrected_correlation * (sd(con_gross$change) / sd(con_gross$base)),3)
+  
+ # calculate standard error of the corrected slope
+n <- length(con$exp_Gross_photo_ug_h_cm2)
+r <- corrected_correlation
+
+# approximate standard error of r on original scale using Fisher z SE
+se_r <- zse * (1 - r^2)
+
+sd_y <- sd(con_gross$change)
+sd_x <- sd(con_gross$base)
+
+se_slope <- se_r * (sd_y / sd_x)
+se_slope <- round(se_slope, 3)
 
 
-#gross original: -0.59, corrected: -0.47 Conf 95%(-0.66 to -0.23), r2=0.222 p= 0.0004, corrected slope = -0.486
+#gross original: -0.59, corrected: -0.47 Conf 95%(-0.66 to -0.23), r2=0.222 p= 0.0004, corrected slope = -0.486, se slope 0.116
  
  
  ################################ Calc
@@ -884,9 +980,22 @@ z_blom <- z(corrected_correlation)
  
    # get corrected slope
  slope_cor_c_con <- round(corrected_correlation * (sd(con_cal$change) / sd(con_cal$base)),3)
+ 
+     # calculate standard error of the corrected slope
+n <- length(con$exp_Calc_umol_h_cm2)
+r <- corrected_correlation
+
+# approximate standard error of r on original scale using Fisher z SE
+se_r <- zse * (1 - r^2)
+
+sd_y <- sd(con_cal$change)
+sd_x <- sd(con_cal$base)
+
+se_slope <- se_r * (sd_y / sd_x)
+se_slope <- round(se_slope, 3)
 
 
-#Calc original: -0.45, corrected: -0.21 Conf 95%(-0.46 to 0.07), r2= 0.045 p= 0.14 -> non sig., corrected slope = -0.137
+#Calc original: -0.45, corrected: -0.21 Conf 95%(-0.46 to 0.07), r2= 0.045 p= 0.14 -> non sig., corrected slope = -0.137, se slope 0.089
 ```
 
 
