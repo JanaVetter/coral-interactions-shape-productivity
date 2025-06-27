@@ -37,6 +37,10 @@ single <- single %>% drop_na(net_photo_h_surface)
 
 ---------- One way ANOVA between the three families with fragment ID as random factor ----------
 ```{r}
+# set order of families
+single$family <- factor(single$family, levels= c("Poritidae", "Acroporidae", "Pocilloporidae"))
+single_c$family <- factor(single_c$family, levels= c("Poritidae", "Acroporidae", "Pocilloporidae"))
+
 # check data
 table(single$family, single$fragment_ID)
 table(single_c$family, single_c$fragment_ID)
@@ -44,32 +48,56 @@ table(single$family, single$run)
 single$run <-as.factor(single$run)
 
 # analysis net photosynthesis
-mod_frag_n <- lme(net_photo_h_surface ~ family, random= ~1|fragment_ID, data=single)
+mod_frag_n <- lme(net_photo_h_surface ~ family, random= ~1|species/colony/fragment_ID, data=single)
 summary(mod_frag_n)
 anova(mod_frag_n)
 posthoc_n <- glht(mod_frag_n,linfct=mcp(family="Tukey"),test= adjusted("bonfer"))
 summary(posthoc_n)
 
+# extracting the compact letter display for the graph below an
+cld_net <- multcomp::cld(posthoc_n, alpha = 0.05, Letters=letters, sort=F)
+
+#Get letters for graphs
+cld_net_letters <- cld_net$mcletters$Letters
+
 # analysis respiration
-mod_frag_r <- lme(respiration_h_surface ~ family, random= ~1|fragment_ID, data=single)
+mod_frag_r <- lme(respiration_h_surface ~ family, random= ~1|species/colony/fragment_ID, data=single)
 summary(mod_frag_r)
 anova(mod_frag_r)
 posthoc_r <- glht(mod_frag_r,linfct=mcp(family="Tukey"),test= adjusted("bonfer"))
 summary(posthoc_r)
 
+# extracting the compact letter display for the graph below an
+cld_res <- multcomp::cld(posthoc_r, alpha = 0.05, Letters=letters, sort=F)
+
+#Get letters for graphs
+cld_res_letters <- cld_res$mcletters$Letters
+
 # analysis gross photosynthesis
-mod_frag_g <- lme(sqrt(gross_photo_h_surface) ~ family, random= ~1|fragment_ID, data=single) #square root transformed
+mod_frag_g <- lme(sqrt(gross_photo_h_surface) ~ family, random= ~1|species/colony/fragment_ID, data=single) #square root transformed
 summary(mod_frag_g)
 anova(mod_frag_g)
 posthoc_g <- glht(mod_frag_g,linfct=mcp(family="Tukey"),test= adjusted("bonfer"))
 summary(posthoc_g)
 
+# extracting the compact letter display for the graph below an
+cld_gros <- multcomp::cld(posthoc_g, alpha = 0.05, Letters=letters, sort=F)
+
+#Get letters for graphs
+cld_gros_letters <- cld_gros$mcletters$Letters
+
 # analysis calcification
-mod_frag_c <- lme(calc_umol_cm2_h ~ family, random = ~1|fragment_ID, data=single_c)
+mod_frag_c <- lme(calc_umol_cm2_h ~ family, random = ~1|species/colony/fragment_ID, data=single_c)
 summary(mod_frag_c)
 anova(mod_frag_c)
 posthoc_c <- glht(mod_frag_c,linfct=mcp(family="Tukey"),test= adjusted("bonfer"))
 summary(posthoc_c)
+
+# extracting the compact letter display for the graph below an
+cld_calc <- multcomp::cld(posthoc_c, alpha = 0.05, Letters=letters, sort=F)
+
+#Get letters for graphs
+cld_calc_letters <- cld_calc$mcletters$Letters
 ```
 
 ```{r}
@@ -185,13 +213,14 @@ single_c$family <- factor(single_c$family, levels= c("Poritidae", "Acroporidae",
 n_fam <- ggboxplot(single, x = "family", y = "net_photo_h_surface", fill = "family", outlier.size = 0.7) +
   scale_fill_manual(values = c("Acroporidae"="#00b886","Pocilloporidae"= "#Cd8d00","Poritidae"= "#0072B2"))+
   scale_y_continuous(limits= c(0, 69),n.breaks = 4)+
-   geom_bracket(
-        xmin=c("Poritidae"), xmax=c("Pocilloporidae"),
-        y.position = 62,
-        step.increase = 0.15,
-        label = c("*"),
-        label.size = 6
-          )+
+   annotate("text", x= c(1,2,3), y= 69, label = cld_net_letters, size = 6)+
+  # geom_bracket(
+   #     xmin=c("Poritidae"), xmax=c("Pocilloporidae"),
+    #    y.position = 62,
+     #   step.increase = 0.15,
+      #  label = c("*"),
+       # label.size = 6
+        #  )+
   theme_classic() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_text(size = 14, vjust = 0.5, color = "black"),
@@ -207,59 +236,62 @@ n_fam <- ggboxplot(single, x = "family", y = "net_photo_h_surface", fill = "fami
 r_fam <- ggboxplot(single, x = "family", y = "respiration_h_surface", fill= "family", outlier.size = 0.7) +
   scale_fill_manual(values = c("Acroporidae"="#00b886","Pocilloporidae"= "#Cd8d00","Poritidae"= "#0072B2"))+
   scale_y_continuous(limits= c(0, 70),n.breaks = 4)+
+  annotate("text", x= c(1,2,3), y= 70, label = cld_res_letters, size = 6)+
   theme_classic() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_text(size = 14, vjust = 0.5, color = "black"),
         axis.title.y =element_blank(),
         axis.title.x=element_blank(),
         legend.position = "none",
-        axis.ticks.x=element_blank())+
-        geom_bracket(
-        xmin=c("Acroporidae", "Poritidae"), xmax=c("Pocilloporidae", "Pocilloporidae"),
-        y.position = 51,
-        step.increase = 0.24,
-        label = c("***", "***"),
-        label.size = 6
-        )
+        axis.ticks.x=element_blank())#+
+        #geom_bracket(
+        #xmin=c("Acroporidae", "Poritidae"), xmax=c("Pocilloporidae", "Pocilloporidae"),
+        #y.position = 51,
+        #step.increase = 0.24,
+        #label = c("***", "***"),
+        #label.size = 6
+        #)
     
 # Gross Photosynthesis
 g_fam <- ggboxplot(single, x = "family", y = "gross_photo_h_surface", fill= "family", outlier.size = 0.7) +
   scale_fill_manual(values = c("Acroporidae"="#00b886","Pocilloporidae"= "#Cd8d00","Poritidae"= "#0072B2"))+
   scale_y_continuous(limits= c(0, 128), breaks = seq(0,100, by=50))+
+  annotate("text", x= c(1,2,3), y= 128, label = cld_gros_letters, size = 6)+
   theme_classic() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_text(size = 14, vjust = 0.5, color = "black"),
         axis.title.y =element_blank(),
         axis.title.x=element_blank(),
         legend.position = "none",
-        axis.ticks.x=element_blank())+
-        geom_bracket(
-        xmin=c("Acroporidae", "Poritidae"), xmax=c("Pocilloporidae", "Pocilloporidae"),
-        y.position = 92,
-        step.increase = 0.25,
-        label = c("**", "***"),
-        label.size = 6
-        )
+        axis.ticks.x=element_blank())#+
+       # geom_bracket(
+        #xmin=c("Acroporidae", "Poritidae"), xmax=c("Pocilloporidae", "Pocilloporidae"),
+        #y.position = 92,
+        #step.increase = 0.25,
+        #label = c("**", "***"),
+        #label.size = 6
+        #)
 
 
 # Calcification
 c_fam <- ggboxplot(single_c, x = "family",  y = "calc_umol_cm2_h", fill= "family", outlier.size = 0.7) +
   scale_fill_manual(values = c("Acroporidae"="#00b886","Pocilloporidae"= "#Cd8d00","Poritidae"= "#0072B2"))+
   scale_y_continuous(limits= c(-0.4, 3.2))+
+  annotate("text", x= c(1,2,3), y= 3.2, label = cld_calc_letters, size = 6)+
   theme_classic() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_text(size = 14, vjust = 0.5, color = "black"),
         axis.title.y =element_blank(),
         axis.title.x=element_blank(),
         legend.position = "none",
-        axis.ticks.x=element_blank())+
-        geom_bracket(
-        xmin=c("Acroporidae", "Poritidae"), xmax=c("Pocilloporidae", "Pocilloporidae"),
-        y.position = 2.2,
-        step.increase = 0.24,
-        label = c("***", "***"),
-        label.size = 6
-        )
+        axis.ticks.x=element_blank())#+
+      #  geom_bracket(
+       # xmin=c("Acroporidae", "Poritidae"), xmax=c("Pocilloporidae", "Pocilloporidae"),
+      #  y.position = 2.2,
+       # step.increase = 0.24,
+        #label = c("***", "***"),
+        #label.size = 6
+        #)
 
 #arrange all plots together
 arranged <- ggarrange(
@@ -276,9 +308,11 @@ arranged <- ggarrange(
           ncol = 2, nrow =2, 
           hjust = -0.5,
           vjust = 0,
-          align = "v") 
+          align = "v")
 
-ggsave("Graphs/measured_orderfamily.png", width=12, height= 12, limitsize=FALSE, dpi= 700, arranged)
+arranged2 <- annotate_figure(arranged, fig.lab= "Figure 2", fig.lab.pos = "top.left", fig.lab.face = "bold", fig.lab.size = 18)
+
+ggsave("Graphs/Figure2_measuredFamily.tiff", width=12, height= 12, limitsize=FALSE, dpi= 700, bg= "white", arranged2)
 ```
 
 

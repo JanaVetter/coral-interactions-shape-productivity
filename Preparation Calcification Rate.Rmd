@@ -329,7 +329,8 @@ surf <- ALL  %>% filter(category != "biomass")
 surf1 <- ggplot(surf, aes(x = sum_surface_cm2, y = net_photo_ug_h, group= category, color = category)) +
   geom_smooth(method=lm) +
   geom_point(size=1.0) +
-  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  #stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  stat_cor(method = "pearson", aes(label = ..r.label..), size=6)+
   xlab(expression(paste("Surface area"," [cm" ^2,"]")))+
   ylab(expression(paste("Measured net photosynthesis (μg O "[2]," h" ^-1,")")))+
   scale_shape_discrete(name = "Incubations",
@@ -342,7 +343,8 @@ surf1 <- ggplot(surf, aes(x = sum_surface_cm2, y = net_photo_ug_h, group= catego
 surf2 <- ggplot(surf, aes(x = sum_surface_cm2, y = respiration_ug_h, group= category, color= category)) +
   geom_smooth(method=lm) +
   geom_point(size=1.0) +
-  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+ # stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  stat_cor(method = "pearson", aes(label = ..r.label..), size=6)+
   xlab(expression(paste("Surface area"," [cm" ^2,"]")))+
   ylab(expression(paste("Measured respiration (μg O "[2]," h" ^-1,")")))+
   scale_shape_discrete(name = "Incubations",
@@ -355,7 +357,8 @@ surf2 <- ggplot(surf, aes(x = sum_surface_cm2, y = respiration_ug_h, group= cate
 surf3 <- ggplot(surf, aes(x = sum_surface_cm2, y = gross_photo_ug_h, group= category, color = category)) +
   geom_smooth(method=lm) +
   geom_point(size=1.0) +
-  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  #stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  stat_cor(method = "pearson", aes(label = ..r.label..), size=6)+
   xlab(expression(paste("Surface area"," [cm" ^2,"]")))+
   ylab(expression(paste("Measured gross photosynthesis (μg O "[2]," h" ^-1,")")))+
   scale_shape_discrete(name = "Incubations",
@@ -369,7 +372,8 @@ surf3 <- ggplot(surf, aes(x = sum_surface_cm2, y = gross_photo_ug_h, group= cate
 surf4 <- ggplot(surf, aes(x = sum_surface_cm2, y = Calc_umol_h, group= category, color = category)) +
   geom_smooth(method=lm) +
   geom_point(size=1.0) +
-  stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  #stat_cor(method = "pearson", p.accuracy = 0.001, r.accuracy = 0.01, size= 6)+
+  stat_cor(method = "pearson", aes(label = ..r.label..), size=6)+
   xlab(expression(paste("Surface area"," [cm" ^2,"]")))+
   ylab(expression(paste("Measured calcification (μmol CaCO"[3]," h" ^-1,")")))+
   scale_shape_discrete(name = "Incubations",
@@ -382,8 +386,9 @@ surf4 <- ggplot(surf, aes(x = sum_surface_cm2, y = Calc_umol_h, group= category,
 arranged_surf <- ggarrange(
                       surf1, surf2, surf3, surf4,
                       labels = c("a)", "b)", "c)", "d)"),
-                      label.x = 0,
-                      label.y = 0.95,
+                      label.x = 0.04,
+                      label.y = 0.92,
+                      font.label = list(size=18),
                       common.legend = TRUE,
                       legend = "bottom",
                       ncol = 2, nrow =2, 
@@ -391,7 +396,9 @@ arranged_surf <- ggarrange(
                       vjust = 0) +
                       theme(legend.text = element_text(size = 45))
 
-ggsave("Graphs/surfacearea_manuscript.png", width=17, height= 13, limitsize=FALSE, dpi= 700, arranged_surf)
+arranged_surf2 <- annotate_figure(arranged_surf, fig.lab= "Figure S2", fig.lab.pos = "top.left", fig.lab.face = "bold", fig.lab.size = 18)
+
+ggsave("Graphs/FigureS2_surfacearea.tiff", width=17, height= 14, limitsize=FALSE, dpi= 700, bg= "white", arranged_surf2)
 ```
 
 

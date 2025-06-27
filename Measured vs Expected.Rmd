@@ -536,20 +536,23 @@ con_calc_comp <- left_join(con_calc, summary_calc)
           axis.title.x=element_blank(),
           axis.text.y = element_text(size = 16, vjust = 0.5, color = "black"),
           axis.title.y =element_text(hjust = 0.5, size=15,face="bold",margin=margin(0,12,0,0)))
+ 
 
 
 # Net photo
-con_net_graph <-ggplot(con_net, aes(x =species, y = exp_obs_net_photo_perc, fill = type)) +
-  geom_boxplot(outlier.shape = NA, lwd=1) +
-  geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+con_net_graph <-ggplot(con_net, aes(x =species, y = exp_obs_net_photo_perc, color = type)) +
+  geom_point()+
+  stat_summary(fun= "median", fun.min = "median", fun.max = "median", linewidth= 0.3, geom="crossbar", color= "black")+
+ # geom_boxplot(outlier.shape = NA, lwd=1) +
+  #geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
   ylab("\nNet photosynthesis\n(% change from expected)") +
-  scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+  scale_color_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#CC0000","neutral"= "#999999", "pos" = "#33CC66"))+
   scale_y_continuous(limits = c(-70, 120), breaks = seq(-60, 120, by = 20))+
-  annotate("text", x= 1, y = 120, label = "***", size= 8 )+
-  annotate("text", x= 2, y = 120, label = "***", size= 8)+
-  annotate("text", x= 3, y = 120, label = "**", size= 8)+
-  annotate("text", x= 6, y = 120, label = "**", size= 8 )+
+ # annotate("text", x= 1, y = 120, label = "***", size= 8 )+
+#  annotate("text", x= 2, y = 120, label = "***", size= 8)+
+#  annotate("text", x= 3, y = 120, label = "**", size= 8)+
+ # annotate("text", x= 6, y = 120, label = "**", size= 8 )+
   annotate("text", x= 2, y = -70, label = "Poritidae", size= 4.5, fontface="bold" )+
   annotate("text", x= 5, y = -70, label = "Acroporidae", size= 4.5, fontface="bold" )+
   annotate("text", x= 8, y = -70, label = "Pocilloporidae", size= 4.5, fontface="bold" )+
@@ -559,16 +562,18 @@ con_net_graph <-ggplot(con_net, aes(x =species, y = exp_obs_net_photo_perc, fill
   theme2
 
 # respiration
-con_resp_graph <-ggplot(con_resp, aes(x = species, y = exp_obs_respiration_perc, fill=type)) +
-  geom_boxplot(outlier.shape = NA, lwd=1) +
-  geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+con_resp_graph <-ggplot(con_resp, aes(x = species, y = exp_obs_respiration_perc, color=type)) +
+  geom_point()+
+  stat_summary(fun= "median", fun.min = "median", fun.max = "median", linewidth= 0.3, geom="crossbar", color= "black")+
+ # geom_boxplot(outlier.shape = NA, lwd=1) +
+  #geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
   ylab("\nRespiration\n(% change from expected)") +
-  scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+ scale_color_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#CC0000","neutral"= "#999999", "pos" = "#33CC66"))+
   scale_y_continuous(limits = c(-100, 200), breaks = seq(-80, 200, by = 40))+
-  annotate("text", x= 2, y = 200, label = "*", size= 8 )+
-  annotate("text", x= 4, y = 200, label = "*", size= 8 )+
-  annotate("text", x= 7, y = 200, label = "*", size= 8 )+
+ # annotate("text", x= 2, y = 200, label = "*", size= 8 )+
+  #annotate("text", x= 4, y = 200, label = "*", size= 8 )+
+  #annotate("text", x= 7, y = 200, label = "*", size= 8 )+
   annotate("text", x= 2, y = -100, label = "Poritidae", size= 4.5, fontface="bold" )+
   annotate("text", x= 5, y = -100, label = "Acroporidae", size= 4.5, fontface="bold" )+
   annotate("text", x= 8, y = -100, label = "Pocilloporidae", size= 4.5, fontface ="bold" )+
@@ -577,18 +582,20 @@ con_resp_graph <-ggplot(con_resp, aes(x = species, y = exp_obs_respiration_perc,
   theme2
 
 # gross photo
-con_gross_graph <-ggplot(con_gross, aes(x = species, y =exp_obs_gross_photo_perc, fill =type)) +
-  geom_boxplot(outlier.shape = NA, lwd=1) +
-  geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+con_gross_graph <-ggplot(con_gross, aes(x = species, y =exp_obs_gross_photo_perc, color =type)) +
+  geom_point()+
+  stat_summary(fun= "median", fun.min = "median", fun.max = "median", linewidth= 0.3, geom="crossbar", color= "black")+
+ #geom_boxplot(outlier.shape = NA, lwd=1) +
+  #geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
   ylab("\nGross photosynthesis\n(% change from expected)") +
-  scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+  scale_color_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#CC0000","neutral"= "#999999", "pos" = "#33CC66"))+
   scale_y_continuous(limits = c(-55, 100), breaks = seq(-40, 100, by = 20))+
-  annotate("text", x= 1, y = 100, label = "**", size= 8 )+
-  annotate("text", x= 2, y = 100, label = "*", size= 8 )+
-  annotate("text", x= 5, y = 100, label = "*", size= 8 )+
-  annotate("text", x= 6, y = 100, label = "**", size= 8 )+
-  annotate("text", x= 7, y = 100, label = "**", size= 8 )+
+ # annotate("text", x= 1, y = 100, label = "**", size= 8 )+
+  #annotate("text", x= 2, y = 100, label = "*", size= 8 )+
+  #annotate("text", x= 5, y = 100, label = "*", size= 8 )+
+  #annotate("text", x= 6, y = 100, label = "**", size= 8 )+
+  #annotate("text", x= 7, y = 100, label = "**", size= 8 )+
   annotate("text", x= 2, y = -55, label = "Poritidae", size= 4.5, fontface="bold" )+
   annotate("text", x= 5, y = -55, label = "Acroporidae", size= 4.5, fontface="bold" )+
   annotate("text", x= 8, y = -55, label = "Pocilloporidae", size= 4.5, fontface="bold" )+
@@ -696,18 +703,20 @@ mix_calc$species <- factor(mix_calc$species, levels = c("Pve_Mdi_Pru", "Spi_Mdi_
 # Graphs showing percentage difference per diversity incubation
 
 # net photo
-div_net_graph <- ggplot(mix_net, aes(x = reorder(species, exp_obs_net_photo_perc, median), y = exp_obs_net_photo_perc, fill = type_2)) +
-  geom_boxplot(outlier.shape = NA, lwd=1) +
-  geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+div_net_graph <- ggplot(mix_net, aes(x = reorder(species, exp_obs_net_photo_perc, median), y = exp_obs_net_photo_perc, color = type_2)) +
+  geom_point()+
+  stat_summary(fun= "median", fun.min = "median", fun.max = "median", linewidth= 0.3, geom="crossbar", color= "black")+
+ # geom_boxplot(outlier.shape = NA, lwd=1) +
+  #geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
   ylab("\nNet photosynthesis\n(% change from expected)") +
-  scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+  scale_color_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#CC0000","neutral"= "#999999", "pos" = "#33CC66"))+
   #scale_y_continuous(breaks = seq(-40, 80, by = 40))+
   scale_y_continuous(limits = c(-70, 120), breaks = seq(-60, 120, by = 20))+
-  annotate("text", x= 1, y = 120, label = "**", size= 8 )+
-  annotate("text", x= 2, y = 120, label = "**", size= 8)+
-  annotate("text", x= 3, y = 120, label = "**", size= 8)+
-  annotate("text", x= 11, y = 120, label = "*", size= 8 )+
+ # annotate("text", x= 1, y = 120, label = "**", size= 8 )+
+  #annotate("text", x= 2, y = 120, label = "**", size= 8)+
+  #annotate("text", x= 3, y = 120, label = "**", size= 8)+
+  #annotate("text", x= 11, y = 120, label = "*", size= 8 )+
   #annotate("text", x= -0.4, y = -71, label = "Poritidae", size=4, fontface= "bold")+
   #annotate("text", x= -0.9, y = -80, label = "Acroporidae", size=4, fontface= "bold")+
   #annotate("text", x= -0.4, y = -97, label = "Pocilloporidae", size=4, fontface= "bold")+
@@ -717,18 +726,20 @@ div_net_graph <- ggplot(mix_net, aes(x = reorder(species, exp_obs_net_photo_perc
 
 
 # respiration
-div_resp_graph <-ggplot(mix_resp, aes(x = species, y = exp_obs_respiration_perc, fill=type_2)) +
-  geom_boxplot(outlier.shape = NA, lwd=1) +
-  geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+div_resp_graph <-ggplot(mix_resp, aes(x = species, y = exp_obs_respiration_perc, color=type_2)) +
+  geom_point()+
+  stat_summary(fun= "median", fun.min = "median", fun.max = "median", linewidth= 0.3, geom="crossbar", color= "black")+
+  #geom_boxplot(outlier.shape = NA, lwd=1) +
+  #geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
   ylab("\nRespiration\n(% change from expected)") +
-  scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+  scale_color_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#CC0000","neutral"= "#999999", "pos" = "#33CC66"))+
   #scale_y_continuous(breaks = seq(-40, 80 , by = 40))+
   scale_y_continuous(limits = c(-100, 200), breaks = seq(-80, 200, by = 40))+
-  annotate("text", x= 4, y = 200, label = "*", size= 8 )+
-  annotate("text", x= 7, y = 200, label = "**", size= 8 )+
-  annotate("text", x= 9, y = 200, label = "*", size= 8 )+
-  annotate("text", x= 10, y = 200, label = "*", size= 8 )+
+ # annotate("text", x= 4, y = 200, label = "*", size= 8 )+
+#  annotate("text", x= 7, y = 200, label = "**", size= 8 )+
+ # annotate("text", x= 9, y = 200, label = "*", size= 8 )+
+  #annotate("text", x= 10, y = 200, label = "*", size= 8 )+
   #annotate("text", x= -0.8, y = -67, label = "Poritidae", size=4, fontface= "bold")+
   #annotate("text", x= -1.9, y = -82, label = "Acroporidae", size=4, fontface= "bold")+
   #annotate("text", x= -3, y = -97, label = "Pocilloporidae", size=4, fontface= "bold")+
@@ -737,19 +748,21 @@ div_resp_graph <-ggplot(mix_resp, aes(x = species, y = exp_obs_respiration_perc,
 
 
 # gross photo
-div_gross_graph <-ggplot(mix_gross, aes(x = species, y =exp_obs_gross_photo_perc, fill =type_2)) +
-  geom_boxplot(outlier.shape = NA, lwd=1) +
-  geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+div_gross_graph <-ggplot(mix_gross, aes(x = species, y =exp_obs_gross_photo_perc, color =type_2)) +
+  geom_point()+
+  stat_summary(fun= "median", fun.min = "median", fun.max = "median", linewidth= 0.3, geom="crossbar", color= "black")+
+  #geom_boxplot(outlier.shape = NA, lwd=1) +
+  #geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
   ylab("\nGross photosynthesis\n(% change from expected)") +
-  scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+  scale_color_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#CC0000","neutral"= "#999999", "pos" = "#33CC66"))+
   #scale_y_continuous(breaks = seq(-40, 40, by = 20))+
   scale_y_continuous(breaks = seq(-40, 100, by = 20))+
-  annotate("text", x= 1, y = 100, label = "*", size= 8 )+
-  annotate("text", x= 2, y = 100, label = "**", size= 8 )+
-  annotate("text", x= 4, y = 100, label = "*", size= 8 )+
-  annotate("text", x= 7, y = 100, label = "*", size= 8 )+
-  annotate("text", x= 10, y = 100, label = "*", size= 8 )+
+ # annotate("text", x= 1, y = 100, label = "*", size= 8 )+
+  #annotate("text", x= 2, y = 100, label = "**", size= 8 )+
+  #annotate("text", x= 4, y = 100, label = "*", size= 8 )+
+  #annotate("text", x= 7, y = 100, label = "*", size= 8 )+
+  #annotate("text", x= 10, y = 100, label = "*", size= 8 )+
   annotate("text", x= -0.82, y = -72, label = "Poritidae", size=4.5, fontface= "bold")+
   annotate("text", x= -2.1, y = -88, label = "Acroporidae", size=4.5, fontface= "bold")+
   annotate("text", x= -3.2, y = -104, label = "Pocilloporidae", size=4.5, fontface= "bold")+
@@ -758,12 +771,14 @@ div_gross_graph <-ggplot(mix_gross, aes(x = species, y =exp_obs_gross_photo_perc
 
 
 # calcification
-div_calc_graph <-ggplot(mix_calc, aes(x = species, y = exp_obs_calc_perc, fill =type_2)) +
-  geom_boxplot(outlier.shape = NA, lwd=1) +
-   geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
+div_calc_graph <-ggplot(mix_calc, aes(x = species, y = exp_obs_calc_perc, color =type_2)) +
+  geom_point()+
+  stat_summary(fun= "median", fun.min = "median", fun.max = "median", linewidth= 0.3, geom="crossbar", color= "black")+
+  #geom_boxplot(outlier.shape = NA, lwd=1) +
+   #geom_jitter(inherit.aes = TRUE, position=position_jitterdodge(dodge.width=0.2, jitter.width=0.2), size = 1) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
   ylab("\nCalcification\n(% change from expected)") +
-   scale_fill_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#FF9999","neutral"= "#CCCCCC", "pos" = "#c4eda1"))+
+  scale_color_manual(name = "", labels = c("neg" = "significantly negative", "neutral" = "no significant difference", "pos" = "significantly positive"), values = c("neg"="#CC0000","neutral"= "#999999", "pos" = "#33CC66"))+
  scale_y_continuous(limits = c(-100, 270), breaks = seq(-100, 200, by = 50))+
     theme
 ```
@@ -785,7 +800,9 @@ arranged_perc_conmix <-
                 legend.position = "bottom",
                 legend.text = element_text(size = 16))
 
-ggsave("Graphs/All_mixANDcon_perc.png", width=12, height= 13, limitsize=FALSE, dpi= 700, arranged_perc_conmix)
+arranged_perc_conmix2 <- annotate_figure(arranged_perc_conmix, fig.lab= "Figure 3", fig.lab.pos = "top.left", fig.lab.face = "bold", fig.lab.size = 18)
+
+ggsave("Graphs/Figure3_ConMix_perc.tiff", width=12, height= 13, limitsize=FALSE, dpi= 700, bg= "white", arranged_perc_conmix2)
 ```
 
 
@@ -866,7 +883,7 @@ con_lolli <-ggplot(final_median, aes(x= species, y=median, color=name))+
   geom_linerange(aes(x = species, ymin = median, ymax = 0), position = position_dodge(width = 0.5)) +
   geom_point(position = position_dodge(width = 0.5), size = 3, shape = 18)+
   scale_y_continuous(limits = c(-40, 65), breaks = seq(-40, 60, by = 20))+
-  ylab("Conspecific productivity\nper species")+
+  ylab("Conspecific productivity\nper species\n(% change from expected)")+
   scale_color_manual("", values= c("gross" ="#C81ACC","net" = "#F16226", "resp"= "#44AA99"),labels = c("gross" = "gross photosynthesis", "net" = "net photosynthesis", "resp" = "respiration"))+
   scale_x_discrete("", labels = c("Acy_Acy_Acy"="A. cytherea", "Amu_Amu_Amu"="A. muricata", "Mdi_Mdi_Mdi"="M. digitata", "Pve_Pve_Pve"="P. verrucosa", "Pda_Pda_Pda"="P. damicornis", "Spi_Spi_Spi"="S. pistillata", "Plo_Plo_Plo"="P. lobata", "Pcy_Pcy_Pcy"="P. cylindrica", "Pru_Pru_Pru"="P. rus"))+
   annotate("text", x= 2, y = -40, label = "Poritidae", size= 3, fontface="bold" )+
@@ -983,7 +1000,7 @@ div_lolli <-
     geom_point(position = position_dodge(width = 0.5), size = 3, shape = 18)+
     scale_color_manual("", values= c("uni_gross_median" ="#C81ACC","uni_net_median" = "#F16226", "uni_res_median"= "#44AA99"),labels = c("uni_gross_median" = "gross photosynthesis", "uni_net_median" = "net photosynthesis", "uni_res_median" = "respiration"))+
     geom_point(aes(x=species, y=value, fill=name), position = position_dodge(width = 0.5), size=0.5, shape=21, color="black")+
-    ylab("Species contribution\nto multi-family productivity")+
+    ylab("Species contribution\nto multi-family productivity\n(% change from expected)")+
     scale_fill_manual("", values= c("uni_gross_median" ="#C81ACC","uni_net_median" = "#F16226", "uni_res_median"= "#44AA99"),labels = c("uni_gross_median" = "gross photosynthesis", "uni_net_median" = "net photosynthesis", "uni_res_median" = "respiration"))+
     scale_x_discrete("", labels = c("Acy"="A. cytherea", "Amu"="A. muricata", "Mdi"="M. digitata", "Pve"="P. verrucosa", "Pda"="P. damicornis", "Spi"="S. pistillata", "Plo"="P. lobata", "Pcy"="P. cylindrica", "Pru"="P. rus"))+
     scale_y_continuous(limits = c(-40, 65), breaks = seq(-40, 60, by = 20))+
@@ -1038,7 +1055,7 @@ differ_lolli <-
     geom_hline(yintercept = 0, linetype = 2, color = "black") +
     geom_linerange(aes(x = species, ymin = minus, ymax = 0), position = position_dodge(width = 0.5)) +
     geom_point(position = position_dodge(width = 0.5), size = 3, shape = 18)+
-    ylab("Effect strength\n(conspecific vs multi-family)")+
+    ylab("Effect strength\n(conspecific vs multi-family)\n(% change from expected)")+
     scale_color_manual("", values= c("gross" ="#C81ACC","net" = "#F16226", "resp"= "#44AA99"),labels = c("gross" = "gross photosynthesis", "net" = "net photosynthesis", "resp" = "respiration"))+
     scale_x_discrete("", labels = c("Acy"="A. cytherea", "Amu"="A. muricata", "Mdi"="M. digitata", "Pve"="P. verrucosa", "Pda"="P. damicornis", "Spi"="S. pistillata", "Plo"="P. lobata", "Pcy"="P. cylindrica", "Pru"="P. rus"))+
     scale_y_continuous(limits = c(-40, 65), breaks = seq(-40, 60, by = 20))+
@@ -1075,8 +1092,10 @@ arranged_condiv_lolli <-
                 legend.position = "bottom",
                 legend.text = element_text(size = 10))
 
+arranged_condiv_lolli2 <- annotate_figure(arranged_condiv_lolli, fig.lab= "Figure 4", fig.lab.pos = "top.left", fig.lab.face = "bold", fig.lab.size = 12)
 
-ggsave("Graphs/con_div_median_expob_lolli.png", width=7, height=8, limitsize=FALSE, dpi= 700, arranged_condiv_lolli)
+
+ggsave("Graphs/Figure4_medianLolli.tiff", width=7, height=8, limitsize=FALSE, dpi= 700, bg = "white", arranged_condiv_lolli2)
 ```
 
 

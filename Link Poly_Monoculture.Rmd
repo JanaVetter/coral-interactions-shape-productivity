@@ -215,12 +215,20 @@ plot(resid(mod_c)~fitted(mod_c))
 
 # Models output
 summary(mod_n) #-> Intercept p<0.001, exp p<0.001, adj. R2 =0.12
+sqrt(summary(mod_n)$r.squared) #-> correlation coefficient r = 0.36
+slope_n <- round(coef(mod_n)[2], 3)  # 3 decimal places for display, extract for graphs
 
 summary(mod_r)#-> Intercept p<0.001, exp p=0.001, adj. R2 =0.09
+sqrt(summary(mod_r)$r.squared) #-> correlation coefficient r = 0.32
+slope_r <- round(coef(mod_r)[2], 3)  # 3 decimal places for display, extract for graphs
 
 summary(mod_g)#-> Intercept p<0.001, exp p<0.001, adj. R2 =0.23
+sqrt(summary(mod_g)$r.squared) #-> correlation coefficient r = 0.49
+slope_g <- round(coef(mod_g)[2], 3)  # 3 decimal places for display, extract for graphs
 
 summary(mod_c)#-> Intercept p<0.001, exp p<0.001, adj. R2 =0.25
+sqrt(summary(mod_c)$r.squared) #-> correlation coefficient r = 0.5
+slope_c <- round(coef(mod_c)[2], 3)  # 3 decimal places for display, extract for graphs
 ```
 
 
@@ -263,6 +271,11 @@ r.cint <- function(r,n,level=.95) {
 
 r.cint(corrected_correlation, length(mix$exp_Net_photo_ug_h_cm2))
 
+
+# corrected R squared
+r_squared_corrected <- round(corrected_correlation^2, 3)
+
+
 # p value based on Fisher z transformation
 z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
 zse <- 1/(sqrt(length(mix$exp_Net_photo_ug_h_cm2)-3))
@@ -270,8 +283,12 @@ zse <- 1/(sqrt(length(mix$exp_Net_photo_ug_h_cm2)-3))
 z_blom <- z(corrected_correlation)
 
  min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+ 
+ # get corrected slope
+ slope_cor_n <- round(corrected_correlation * (sd(mix_net$change) / sd(mix_net$base)),3)
+ 
 
-#Net original: -0.69, corrected: -0.22 Conf 95%(-0.40 to -0.03), p= 0.02
+#Net original: -0.69, corrected: -0.22 Conf 95%(-0.40 to -0.03), r^2= 0.049 p= 0.02, corrected slope -0.23
  
  
 ####################################### Resp
@@ -309,6 +326,9 @@ r.cint <- function(r,n,level=.95) {
 
 r.cint(corrected_correlation, length(mix$exp_Resp_ug_h_cm2))
 
+# corrected R squared
+r_squared_corrected <- round(corrected_correlation^2, 3)
+
 # p value based on Fisher z transformation
 z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
 zse <- 1/(sqrt(length(mix$exp_Resp_ug_h_cm2)-3))
@@ -316,8 +336,11 @@ zse <- 1/(sqrt(length(mix$exp_Resp_ug_h_cm2)-3))
 z_blom <- z(corrected_correlation)
 
  min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+ 
+  # get corrected slope
+ slope_cor_r <- round(corrected_correlation * (sd(mix_res$change) / sd(mix_res$base)),3)
 
- #Resp original: -0.62, corrected: -0.29 Conf 95%(-0.46 to -0.11), p= 0.002 
+ #Resp original: -0.62, corrected: -0.29 Conf 95%(-0.46 to -0.11), r2= 0.086, p= 0.002, corrected slope = -0.33 
  
  
  ################################ Gross
@@ -355,6 +378,9 @@ r.cint <- function(r,n,level=.95) {
 
 r.cint(corrected_correlation, length(mix$exp_Gross_photo_ug_h_cm2))
 
+# corrected R squared
+r_squared_corrected <- round(corrected_correlation^2, 3)
+
 # p value based on Fisher z transformation
 z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
 zse <- 1/(sqrt(length(mix$exp_Gross_photo_ug_h_cm2)-3))
@@ -362,8 +388,12 @@ zse <- 1/(sqrt(length(mix$exp_Gross_photo_ug_h_cm2)-3))
 z_blom <- z(corrected_correlation)
 
  min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+ 
+   # get corrected slope
+ slope_cor_g <- round(corrected_correlation * (sd(mix_gross$change) / sd(mix_gross$base)),3)
+ 
 
-#gross original: -0.56, corrected: -0.34 Conf 95%(-0.5 to -0.16), p= 0.0004
+#gross original: -0.56, corrected: -0.34 Conf 95%(-0.5 to -0.16), r2=0.115 p= 0.0004, corrected slope = -0.34
  
  
  ################################ Calc
@@ -401,6 +431,9 @@ r.cint <- function(r,n,level=.95) {
 
 r.cint(corrected_correlation, length(mix$exp_Calc_umol_h_cm2))
 
+# corrected R squared
+r_squared_corrected <- round(corrected_correlation^2, 3)
+
 # p value based on Fisher z transformation
 z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
 zse <- 1/(sqrt(length(mix$exp_Calc_umol_h_cm2)-3))
@@ -408,8 +441,11 @@ zse <- 1/(sqrt(length(mix$exp_Calc_umol_h_cm2)-3))
 z_blom <- z(corrected_correlation)
 
  min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+ 
+   # get corrected slope
+ slope_cor_c <- round(corrected_correlation * (sd(mix_cal$change) / sd(mix_cal$base)),3)
 
-#Calc original: -0.43, corrected: 0.12 Conf 95%(-0.07 to 0.31), p= 0.2 -> non sig.
+#Calc original: -0.43, corrected: 0.12 Conf 95%(-0.07 to 0.31), r2=0.015 p= 0.2 -> non sig., correc6ted slope = 0.13
 ```
 
 
@@ -437,8 +473,9 @@ theme_gross <-theme_classic() +
   geom_point(size=2) +
   geom_abline(intercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 23, y=43, label = "adj. R² = 0.12, p < 0.001", size=4, fontface="bold") +
-  scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
+  #annotate("text", x= 23, y=43, label = "adj. R² = 0.12, p < 0.001", size=4, fontface="bold") +
+  annotate("text", x= 20, y=43, label = paste0("Slope = ", slope_n, ", adj. R² = 0.12, p < 0.001"), size=4, fontface="bold") +
+   scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
   scale_y_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
   xlab(expression(bold(atop("Expected net photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
   ylab(expression(bold(atop("Measured net photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
@@ -449,7 +486,8 @@ resp2 <-ggplot(mix, aes( x = exp_Resp_ug_h_cm2, y = respiration_h_surface)) +
   geom_point(size=2) +
   geom_abline(intercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 23, y=43, label = "adj. R² = 0.09, p = 0.001", size=4, fontface="bold") +
+  #annotate("text", x= 23, y=43, label = "adj. R² = 0.09, p = 0.001", size=4, fontface="bold") +
+  annotate("text", x= 19, y=43, label = paste0("Slope = ", slope_r, ", adj. R² = 0.09, p = 0.001"), size=4, fontface="bold") +
   scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
   scale_y_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
   xlab(expression(bold(atop("Expected respiration", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
@@ -460,7 +498,8 @@ gross3 <-ggplot(mix, aes( x =  exp_Gross_photo_ug_h_cm2, y = gross_photo_h_surfa
   geom_point(size=2.5) +
   geom_abline(intercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 54, y=72, label = "adj. R² = 0.23, p < 0.001", size=5, fontface="bold") + 
+  #annotate("text", x= 54, y=72, label = "adj. R² = 0.23, p < 0.001", size=5, fontface="bold") + 
+  annotate("text", x= 37, y=72, label = paste0("Slope = ", slope_g, ", adj. R² = 0.23, p < 0.001"), size=4, fontface="bold") +
   scale_x_continuous(limits = c(15, 72), breaks = seq(20,70, by = 10))+
   scale_y_continuous(limits = c(15, 72), breaks = seq(20, 70, by = 10))+
   xlab(expression(bold(atop("Expected gross photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
@@ -471,7 +510,8 @@ calc4 <-ggplot(mix_calc, aes(x = exp_Calc_umol_h_cm2, y = calc_umol_cm2_h)) +
   geom_point(size=2) +
   geom_abline(intercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 0.8, y=1.53, label = "adj. R² = 0.25, p < 0.001", size=4, fontface="bold") +
+  #annotate("text", x= 0.8, y=1.53, label = "adj. R² = 0.25, p < 0.001", size=4, fontface="bold") +
+  annotate("text", x= 0.7, y=1.53, label = paste0("Slope = ", slope_c, ", adj. R² = 0.25, p < 0.001"), size=4, fontface="bold") +
   scale_x_continuous(limits = c(-0.02, 1.53), breaks = seq(0, 1.5 , by = 0.5))+
   scale_y_continuous(limits = c(-0.02, 1.53), breaks = seq(0, 1.5, by = 0.5))+
   xlab(expression(bold(atop("Expected calcification", paste ("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
@@ -487,7 +527,8 @@ b5 <- ggplot(mix, aes(x = exp_Net_photo_ug_h_cm2, y = exp_obs_net_photo)) +
   geom_point(size=2) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 26, y=24, label = "adj. R = -0.22, p = 0.02", size=4, fontface="bold") +
+  #annotate("text", x= 26, y=24, label = "adj. R = -0.22, p = 0.02", size=4, fontface="bold") +
+  annotate("text", x= 20, y=24, label = paste0("Slope = ", slope_cor_n, ", adj. R² = 0.05, p = 0.02"), size=4, fontface="bold") +
   xlab(expression(bold(atop("Expected net photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
    ylab(expression(bold(atop("Change from expected net", paste("photosynthesis (μg O"[2]," cm" ^-2," h" ^-1,")")))))+
  # scale_x_continuous(limits = c(13, 40), breaks = seq(15, 40, by = 10))+
@@ -500,7 +541,8 @@ b6 <-ggplot(mix, aes(x = exp_Resp_ug_h_cm2, y = exp_obs_respiration)) +
   geom_point(size=2) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 26, y=24, label = "adj. R = -0.29, p = 0.002", size=4, fontface="bold") +
+ # annotate("text", x= 26, y=24, label = "adj. R = -0.29, p = 0.002", size=4, fontface="bold") +
+  annotate("text", x= 21, y=24, label = paste0("Slope = ", slope_cor_r, ", adj. R² = 0.09, p = 0.002"), size=4, fontface="bold") +
   xlab(expression(bold(atop("Expected respiration", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
    ylab(expression(bold(atop("Change from expected respiration", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
   scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
@@ -511,19 +553,21 @@ b7 <-ggplot(mix, aes(x = exp_Gross_photo_ug_h_cm2, y = exp_obs_gross_photo)) +
   geom_point(size=2.5) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 54, y=34, label = "adj. R = -0.34, p < 0.001", size=5, fontface="bold") +
+  #annotate("text", x= 54, y=34, label = "adj. R = -0.34, p < 0.001", size=5, fontface="bold") +
+  annotate("text", x= 40, y=36, label = paste0("Slope = ", slope_cor_g, ", adj. R² = 0.12, p < 0.001"), size=4, fontface="bold") +
   labs(color = "Productivity score\n(\U03A3\ of medians in monoculture)") +
   xlab(expression(bold(atop("Expected gross photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
    ylab(expression(bold(atop("Change from expecte gross photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
   scale_x_continuous(limits = c(20, 72), breaks = seq(20, 70, by = 10))+
-  scale_y_continuous(limits = c(-30, 34), breaks = seq(-30, 30, by = 10))+
+  scale_y_continuous(limits = c(-30, 36), breaks = seq(-30, 30, by = 10))+
       theme_gross
 
 b8 <-ggplot(mix_calc, aes(x = exp_Calc_umol_h_cm2, y = exp_obs_calc)) +
   geom_point(size=2) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
-  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 0.95, y=1, label = "adj. R = 0.12, p = 0.2", size=4, fontface="bold") +
+  #geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  #annotate("text", x= 0.95, y=1, label = "adj. R = 0.12, p = 0.2", size=4, fontface="bold") +
+  annotate("text", x= 1.25, y=1, label = "p = 0.20", size=4, fontface="bold") +
 xlab(expression(bold(atop("Expected calcification", paste ("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
    ylab(expression(bold(atop("Change from expected calcification", paste("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
   scale_x_continuous(limits = c(-0.02,1.53), breaks = seq(0, 1.5, by = 0.5))+
@@ -612,12 +656,20 @@ plot(resid(mod_c_con)~fitted(mod_c_con))
 # # Marginal R2 provides the variance explained only by fixed effects
 
 summary(mod_n_con) #-> Intercept p<0.001, exp p=0.02, adj. R2: 0.09
+sqrt(summary(mod_n_con)$r.squared) #-> correlation coefficient r = 0.33
+slope_n_con <- round(coef(mod_n_con)[2], 3)  # 3 decimal places for display, extract for graphs
 
 summary(mod_r_con)#-> Intercept p<0.001, exp p<0.001, adj. R2: 0.21
+sqrt(summary(mod_r_con)$r.squared) #-> correlation coefficient r = 0.48
+slope_r_con <- round(coef(mod_r_con)[2], 3)  # 3 decimal places for display, extract for graphs
 
 summary(mod_g_con)#-> Intercept p<0.001, exp p=0.002, adj. R2: 0.17
+sqrt(summary(mod_g_con)$r.squared) #-> correlation coefficient r = 0.43
+slope_g_con <- round(coef(mod_g_con)[2], 3)  # 3 decimal places for display, extract for graphs
 
 summary(mod_c_con)#-> Intercept p=0.003, exp p<0.001, adj. R2: 0.60
+sqrt(summary(mod_c_con)$r.squared) #-> correlation coefficient r = 0.78
+slope_c_con <- round(coef(mod_c_con)[2], 3)  # 3 decimal places for display, extract for graphs
 
 ```
 
@@ -661,6 +713,9 @@ r.cint <- function(r,n,level=.95) {
 
 r.cint(corrected_correlation, length(con$exp_Net_photo_ug_h_cm2))
 
+# corrected R squared
+r_squared_corrected <- round(corrected_correlation^2, 3)
+
 # p value based on Fisher z transformation
 z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
 zse <- 1/(sqrt(length(con$exp_Net_photo_ug_h_cm2)-3))
@@ -668,8 +723,11 @@ zse <- 1/(sqrt(length(con$exp_Net_photo_ug_h_cm2)-3))
 z_blom <- z(corrected_correlation)
 
  min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+ 
+  # get corrected slope
+ slope_cor_n_con <- round(corrected_correlation * (sd(con_net$change) / sd(con_net$base)),3)
 
-#Net original: -0.73, corrected: -0.65 Conf 95%(-0.79 to -0.46), p< 0.001
+#Net original: -0.73, corrected: -0.65 Conf 95%(-0.79 to -0.46), r2=0.422, p< 0.001, corrected slope = -0.674
  
  
 ####################################### Resp
@@ -707,6 +765,9 @@ r.cint <- function(r,n,level=.95) {
 
 r.cint(corrected_correlation, length(con$exp_Resp_ug_h_cm2))
 
+# corrected R squared
+r_squared_corrected <- round(corrected_correlation^2, 3)
+
 # p value based on Fisher z transformation
 z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
 zse <- 1/(sqrt(length(con$exp_Resp_ug_h_cm2)-3))
@@ -714,8 +775,12 @@ zse <- 1/(sqrt(length(con$exp_Resp_ug_h_cm2)-3))
 z_blom <- z(corrected_correlation)
 
  min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+ 
+   # get corrected slope
+ slope_cor_r_con <- round(corrected_correlation * (sd(con_res$change) / sd(con_res$base)),3)
 
- #Resp original: -0.50, corrected: -0.25 Conf 95%(-0.49 to 0.03), p= 0.08 -> non sig.
+
+ #Resp original: -0.50, corrected: -0.25 Conf 95%(-0.49 to 0.03), r2=0.063 p= 0.08 -> non sig., corrected slope = -0.259
  
  
  ################################ Gross
@@ -753,6 +818,9 @@ r.cint <- function(r,n,level=.95) {
 
 r.cint(corrected_correlation, length(con$exp_Gross_photo_ug_h_cm2))
 
+# corrected R squared
+r_squared_corrected <- round(corrected_correlation^2, 3)
+
 # p value based on Fisher z transformation
 z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
 zse <- 1/(sqrt(length(con$exp_Gross_photo_ug_h_cm2)-3))
@@ -760,8 +828,12 @@ zse <- 1/(sqrt(length(con$exp_Gross_photo_ug_h_cm2)-3))
 z_blom <- z(corrected_correlation)
 
  min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+ 
+   # get corrected slope
+ slope_cor_g_con <- round(corrected_correlation * (sd(con_gross$change) / sd(con_gross$base)),3)
 
-#gross original: -0.59, corrected: -0.47 Conf 95%(-0.66 to -0.23), p= 0.0004
+
+#gross original: -0.59, corrected: -0.47 Conf 95%(-0.66 to -0.23), r2=0.222 p= 0.0004, corrected slope = -0.486
  
  
  ################################ Calc
@@ -799,6 +871,9 @@ r.cint <- function(r,n,level=.95) {
 
 r.cint(corrected_correlation, length(con$exp_Calc_umol_h_cm2))
 
+# corrected R squared
+r_squared_corrected <- round(corrected_correlation^2, 3)
+
 # p value based on Fisher z transformation
 z <- function(r){1/2 * log((1+r)/(1-r))} # Normalverteilung korrigieren nach Fisher
 zse <- 1/(sqrt(length(con$exp_Calc_umol_h_cm2)-3))
@@ -806,8 +881,12 @@ zse <- 1/(sqrt(length(con$exp_Calc_umol_h_cm2)-3))
 z_blom <- z(corrected_correlation)
 
  min(pnorm(z_blom, sd= zse), pnorm(z_blom, lower.tail=FALSE, sd=zse))*2
+ 
+   # get corrected slope
+ slope_cor_c_con <- round(corrected_correlation * (sd(con_cal$change) / sd(con_cal$base)),3)
 
-#Calc original: -0.45, corrected: -0.21 Conf 95%(-0.46 to 0.07), p= 0.14 -> non sig.
+
+#Calc original: -0.45, corrected: -0.21 Conf 95%(-0.46 to 0.07), r2= 0.045 p= 0.14 -> non sig., corrected slope = -0.137
 ```
 
 
@@ -835,7 +914,8 @@ theme_gross <-theme_classic() +
   geom_point(size=2) +
   geom_abline(intercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 23, y=43, label = "adj. R² = 0.09, p < 0.001", size=4, fontface="bold") +
+  #annotate("text", x= 23, y=43, label = "adj. R² = 0.09, p < 0.001", size=4, fontface="bold") +
+  annotate("text", x= 20, y=43, label = paste0("Slope = ", slope_n_con, ", adj. R² = 0.09, p < 0.001"), size=4, fontface="bold") +
   scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
   scale_y_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
   xlab(expression(bold(atop("Expected net photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
@@ -847,7 +927,8 @@ resp2_con <-ggplot(con, aes( x = exp_Resp_ug_h_cm2, y = respiration_h_surface)) 
   geom_point(size=2) +
   geom_abline(intercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 23, y=43, label = "adj. R² = 0.21, p < 0.001", size=4, fontface="bold") +
+  #annotate("text", x= 23, y=43, label = "adj. R² = 0.21, p < 0.001", size=4, fontface="bold") +
+   annotate("text", x= 20, y=43, label = paste0("Slope = ", slope_r_con, ", adj. R² = 0.21, p < 0.001"), size=4, fontface="bold") +
   scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
   scale_y_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
   xlab(expression(bold(atop("Expected respiration", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
@@ -858,7 +939,8 @@ gross3_con <-ggplot(con, aes( x =  exp_Gross_photo_ug_h_cm2, y = gross_photo_h_s
   geom_point(size=2.5) +
   geom_abline(intercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 54, y=72, label = "adj. R² = 0.17, p < 0.001", size=5, fontface="bold") + 
+  #annotate("text", x= 54, y=72, label = "adj. R² = 0.17, p < 0.001", size=5, fontface="bold") + 
+  annotate("text", x= 37, y=72, label = paste0("Slope = ", slope_g_con, ", adj. R² = 0.17, p < 0.001"), size=4, fontface="bold") +
   scale_x_continuous(limits = c(15, 72), breaks = seq(20,70, by = 10))+
   scale_y_continuous(limits = c(15, 72), breaks = seq(20, 70, by = 10))+
   xlab(expression(bold(atop("Expected gross photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
@@ -869,7 +951,8 @@ calc4_con <-ggplot(con_calc, aes(x = exp_Calc_umol_h_cm2, y = calc_umol_cm2_h)) 
   geom_point(size=2) +
   geom_abline(intercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 0.8, y=1.53, label = "adj. R² = 0.60, p = 0.003", size=4, fontface="bold") +
+  #annotate("text", x= 0.8, y=1.53, label = "adj. R² = 0.60, p = 0.003", size=4, fontface="bold") +
+  annotate("text", x= 0.7, y=1.53, label = paste0("Slope = ", slope_c_con, ", adj. R² = 0.60, p = 0.003"), size=4, fontface="bold") +
   scale_x_continuous(limits = c(-0.02, 1.53), breaks = seq(0, 1.5 , by = 0.5))+
   scale_y_continuous(limits = c(-0.02, 1.53), breaks = seq(0, 1.5, by = 0.5))+
   xlab(expression(bold(atop("Expected calcification", paste ("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
@@ -885,7 +968,8 @@ b5_con <- ggplot(con, aes(x = exp_Net_photo_ug_h_cm2, y = exp_obs_net_photo)) +
   geom_point(size=2) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 26, y=24, label = "adj. R = -0.65, p < 0.001", size=4, fontface="bold") +
+  #annotate("text", x= 26, y=24, label = "adj. R = -0.65, p < 0.001", size=4, fontface="bold") +
+  annotate("text", x= 20, y=24, label = paste0("Slope = ", slope_cor_n_con, ", adj. R² = 0.42, p < 0.001"), size=4, fontface="bold") +
   xlab(expression(bold(atop("Expected net photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
    ylab(expression(bold(atop("Change from expected net", paste("photosynthesis (μg O"[2]," cm" ^-2," h" ^-1,")")))))+
   scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
@@ -895,8 +979,9 @@ b5_con <- ggplot(con, aes(x = exp_Net_photo_ug_h_cm2, y = exp_obs_net_photo)) +
 b6_con <-ggplot(con, aes(x = exp_Resp_ug_h_cm2, y = exp_obs_respiration)) +
   geom_point(size=2) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
-  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 26, y=24, label = "adj. R = -0.25, p = 0.08", size=4, fontface="bold") +
+  #geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+  #annotate("text", x= 26, y=24, label = "adj. R = -0.25, p = 0.08", size=4, fontface="bold") +
+  annotate("text", x= 36, y=24, label = "p = 0.08", size=4, fontface="bold") +
   xlab(expression(bold(atop("Expected respiration", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
    ylab(expression(bold(atop("Change from expected respiration", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
   scale_x_continuous(limits = c(0, 43), breaks = seq(0, 40, by = 10))+
@@ -907,19 +992,21 @@ b7_con <-ggplot(con, aes(x = exp_Gross_photo_ug_h_cm2, y = exp_obs_gross_photo))
   geom_point(size=2.5) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
   geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 54, y=34, label = "adj. R = -0.47, p < 0.001", size=5, fontface="bold") +
+  #annotate("text", x= 54, y=34, label = "adj. R = -0.47, p < 0.001", size=5, fontface="bold") +
+  annotate("text", x= 40, y= 36, label = paste0("Slope = ", slope_cor_g_con, ", adj. R² = 0.22, p < 0.001"), size=4, fontface="bold") +
   labs(color = "Productivity score\n(\U03A3\ of medians in monoculture)") +
   xlab(expression(bold(atop("Expected gross photosynthesis", paste ("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
    ylab(expression(bold(atop("Change from expected gross photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
   scale_x_continuous(limits = c(20, 72), breaks = seq(20, 70, by = 10))+
-  scale_y_continuous(limits = c(-30, 34), breaks = seq(-30, 30, by = 10))+
+  scale_y_continuous(limits = c(-30, 36), breaks = seq(-30, 30, by = 10))+
       theme_gross
 
 b8_con <-ggplot(con_calc, aes(x = exp_Calc_umol_h_cm2, y = exp_obs_calc)) +
   geom_point(size=2) +
   geom_hline(yintercept = 0, linetype = 2, color = "black") +
-  geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
-  annotate("text", x= 0.95, y=1, label = "adj. R = -0.21, p = 0.14", size=4, fontface="bold") +
+  #geom_smooth(method = "lm", color= "black", linewidth = 0.5 )+
+ # annotate("text", x= 0.95, y=1, label = "adj. R = -0.21, p = 0.14", size=4, fontface="bold") +
+  annotate("text", x= 1.25, y=1, label = "p = 0.14", size=4, fontface="bold") +
  xlab(expression(bold(atop("Expected calcification", paste ("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
    ylab(expression(bold(atop("Change from expected calcification", paste("(μmol CaCO"[3]," cm" ^-2," h" ^-1,")"))))) +
   scale_x_continuous(limits = c(-0.02,1.53), breaks = seq(0, 1.5, by = 0.5))+
@@ -943,7 +1030,9 @@ expObs_bruno_med_con_mix_gross <-
                 plot.title= element_text(size = 16, face="bold"),
                 legend.position = "none")
 
-ggsave("Graphs/con_mix_gross_expobs_bruno.png", width=13, height= 10, limitsize=FALSE, dpi= 700, expObs_bruno_med_con_mix_gross)
+#expObs_bruno_med_con_mix_gross2 <- annotate_figure(expObs_bruno_med_con_mix_gross, fig.lab= "Figure 5", fig.lab.pos = "top.left", fig.lab.face = "bold", fig.lab.size = 18)
+
+ggsave("Graphs/Figure5_gross_expobs.tiff", width=13, height= 10, limitsize=FALSE, dpi= 700, expObs_bruno_med_con_mix_gross)
 
 # rest for appendix
 #conspecific
@@ -956,7 +1045,9 @@ expObs_bruno_med_con_rest <-
                 plot.title= element_text(size = 16, face="bold"),
                 legend.position = "none")
 
-ggsave("Graphs/con_rest_expobs_bruno.png", width=10, height= 12, limitsize=FALSE, dpi= 700, expObs_bruno_med_con_rest)
+#expObs_bruno_med_con_rest2 <- annotate_figure(expObs_bruno_med_con_rest, fig.lab= "Figure S3", fig.lab.pos = "top.left", fig.lab.face = "bold", fig.lab.size = 16)
+
+ggsave("Graphs/FigureS3_con_expobs.tiff", width=10, height= 12, limitsize=FALSE, dpi= 700, expObs_bruno_med_con_rest)
 
 #multi-family
 expObs_bruno_med_mix_rest <-
@@ -968,6 +1059,8 @@ expObs_bruno_med_mix_rest <-
                 plot.title= element_text(size = 16, face="bold"),
                 legend.position = "none")
 
-ggsave("Graphs/mix_rest_expobs_bruno.png", width=10, height= 12, limitsize=FALSE, dpi= 700, expObs_bruno_med_mix_rest)
+#expObs_bruno_med_mix_rest2 <- annotate_figure(expObs_bruno_med_mix_rest, fig.lab= "Figure S4", fig.lab.pos = "top.left", fig.lab.face = "bold", fig.lab.size = 16)
+
+ggsave("Graphs/FigureS4_mix_expobs.tiff", width=10, height= 12, limitsize=FALSE, dpi= 700, expObs_bruno_med_mix_rest)
 
 ```

@@ -311,7 +311,8 @@ Acy_gg <-
   ggplot(Acy, aes(x=date, y=net_photo_h_surface, color=colony, shape=run))+
     geom_point(size=3)+
     geom_line(data=Acy[!is.na(Acy$net_photo_h_surface),])+
-  ylab(expression(paste("Net photosynthesis (μg O"[2]," cm" ^-2," h" ^-1,")"))) +
+ # ylab(expression(paste("Net photosynthesis (μg O"[2]," cm" ^-2," h" ^-1,")"))) +
+  ylab(expression(bold(atop("Net photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
   scale_color_manual(name="colony", values= c("#1E88E5","#004D13", "#FF7307"),labels= c("AcyA"="A", "AcyB"="B", "AcyD"="C"))+
   ggtitle("Measured Values")+
   theme_classic() +
@@ -330,7 +331,8 @@ Acy2_gg <-
   ggplot(Acy_net, aes(x=date, y=Net_photo, color=colony, shape=run))+
     geom_point(size=3)+
     geom_line()+
-  ylab(expression(paste("Net photosynthesis (μg O"[2]," cm" ^-2," h" ^-1,")"))) +
+#  ylab(expression(paste("Net photosynthesis (μg O"[2]," cm" ^-2," h" ^-1,")"))) +
+  ylab(expression(bold(atop("Net photosynthesis", paste("(μg O"[2]," cm" ^-2," h" ^-1,")"))))) +
    scale_color_manual(name="colony", values= c("#1E88E5","#004D13", "#FF7307"),labels= c("AcyA"="A", "AcyB"="B", "AcyD"="C"))+
   ggtitle("Interpolated Values")+
   theme_classic() +
@@ -345,8 +347,9 @@ Acy2_gg <-
 #arrange all plots together
 arranged_Acy <- ggarrange( Acy_gg, Acy2_gg,
           labels = c("a)", "b)"),
-          label.x = 0,
-          label.y = 0.95,
+          label.x = 0.05,
+          label.y = 0.85,
+          font.label = list(size=18),
           common.legend = TRUE,
           legend = "bottom",
           ncol = 2, nrow =1, 
@@ -354,7 +357,9 @@ arranged_Acy <- ggarrange( Acy_gg, Acy2_gg,
           vjust = 0) +
           theme(legend.text = element_text(size = 40))
 
-ggsave("Graphs/M&M_expected.png", width=9, height= 5, limitsize=FALSE, dpi= 700, arranged_Acy)
+arranged_Acy2 <- annotate_figure(arranged_Acy, fig.lab= "Figure S1", fig.lab.pos = "top.left", fig.lab.face = "bold", fig.lab.size = 18)
+
+ggsave("Graphs/FigureS1_expected.tiff", width=9, height= 5, limitsize=FALSE, dpi= 700, bg="white", arranged_Acy2)
 ```
 
 
