@@ -54,6 +54,20 @@ Pve <- Single %>%  filter(species == "Pve")
 Spi<- Single %>%  filter(species == "Spi")
 ```
 
+# Get mean and standard deviation of each colony
+```{r}
+SD_Table <- Single %>% group_by(species, colony, run) %>% summarize(Mean_net = round(mean(net_photo_h_surface, na.rm = TRUE),1),
+                                            SD_net = round(sd(net_photo_h_surface, na.rm = TRUE),1),
+                                            Mean_res = round(mean(respiration_h_surface, na.rm = TRUE),1),
+                                            SD_res = round(sd(respiration_h_surface, na.rm = TRUE),1),
+                                            Mean_gross = round(mean(gross_photo_h_surface, na.rm = TRUE),1),
+                                            SD_gross = round(sd(gross_photo_h_surface, na.rm = TRUE),1),
+                                            Mean_cal = round(mean(calc_umol_cm2_h, na.rm = TRUE),1),
+                                            SD_cal = round(sd(calc_umol_cm2_h, na.rm = TRUE),1))
+
+write.csv(SD_Table, "Graphs/SD_Table.csv", row.names= F)
+
+```
 
 ---------- Calculate expected value ----------
 Decision after looking at the data:

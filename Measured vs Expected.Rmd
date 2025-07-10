@@ -1115,11 +1115,19 @@ write.csv(mean_con, "Graphs/mean_con_exp_obs.csv")
 
 # diversity incubations
 mean_net <- mix_net %>% group_by(species) %>% summarise(mean_net= round(mean(exp_obs_net_photo_perc),1),
-                                                        sd_net=round(sd(exp_obs_net_photo_perc),1))
+                                                        sd_net=round(sd(exp_obs_net_photo_perc),1),
+                                                        median_net = round(median(exp_obs_net_photo_perc),1),
+                                                        mean_real_number = round(mean(net_photo_h_surface),1),
+                                                        sd_real_number = round (sd(net_photo_h_surface),1),
+                                                        exp_mean = round (mean(exp_Net_photo_ug_h_cm2),1),
+                                                        exp_sd = round (sd(exp_Net_photo_ug_h_cm2),1))
+
 mean_resp <- mix_resp %>% group_by(species) %>% summarise(mean_resp= round(mean(exp_obs_respiration_perc),1),
-                                                        sd_resp=round(sd(exp_obs_respiration_perc),1))
+                                                        sd_resp=round(sd(exp_obs_respiration_perc),1),
+                                                         median_resp = round(median(exp_obs_respiration_perc),1))
 mean_gross <- mix_gross %>% group_by(species) %>% summarise(mean_gross= round(mean(exp_obs_gross_photo_perc),1),
-                                                        sd_gross=round(sd(exp_obs_gross_photo_perc),1))
+                                                        sd_gross=round(sd(exp_obs_gross_photo_perc),1),
+                                                         median_gross = round(median(exp_obs_gross_photo_perc),1))
 
 mean_mix <- mean_net %>% left_join(mean_resp, by= "species") %>% left_join(mean_gross, by= "species")
 
